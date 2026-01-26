@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartPneu Studio - Image Queue</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .tab:hover {
+            background: #e0e0e0;
+        }
+        
+        .tab.active {
+            background: #1a1a2e;
+            color: white;
+        }
+        
+        .actions-bar {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .sku-input {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        .sku-input input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+        
+        .sku-input input:focus {
+            outline: none;
+            border-color: #1a1a2e;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #43A047;
+        }
+        
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+        
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+        
+        .selected-count {
+            font-size: 14px;
+            color: #666;
+            min-width: 120px;
+        }
+        
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .image-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .image-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .image-card.selected {
+            outline: 3px solid #4CAF50;
+        }
+        
+        .image-card img {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+        }
+        
+        .image-card .info {
+            padding: 10px;
+        }
+        
+        .image-card .time {
+            font-size: 12px;
+            color: #888;
+        }
+        
+        .image-card .status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-pending { background: #FFF3E0; color: #E65100; }
+        .status-assigned { background: #E3F2FD; color: #1565C0; }
+        .status-processing { background: #F3E5F5; color: #7B1FA2; }
+        .status-processed { background: #E8F5E9; color: #2E7D32; }
+        .status-completed { background: #E8F5E9; color: #2E7D32; }
+        .status-failed { background: #FFEBEE; color: #C62828; }
+        
+        .image-card .sku-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .image-card .checkbox {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .image-card:hover .checkbox,
+        .image-card.selected .checkbox {
+            opacity: 1;
+        }
+        
+        .image-card.selected .checkbox {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .image-card .delete-btn {
+            position: absolute;
+            bottom: 50px;
+            right: 10px;
+            width: 30px;
+            height: 30px;
+            background: rgba(244, 67, 54, 0.9);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .image-card:hover .delete-btn {
+            opacity: 1;
+        }
+        
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            background: white;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .upload-area:hover {
+            border-color: #1a1a2e;
+            background: #fafafa;
+        }
+        
+        .upload-area.dragover {
+            border-color: #4CAF50;
+            background: #E8F5E9;
+        }
+        
+        .upload-area input {
+            display: none;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #888;
+        }
+        
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 16px 24px;
+            border-radius: 8px;
+            display: none;
+            z-index: 1000;
+        }
+        
+        .toast.success { background: #4CAF50; }
+        .toast.error { background: #f44336; }
+        .toast.show { display: block; }
+        
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .modal.show { display: flex; }
+        
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .modal-content h2 {
+            margin-bottom: 20px;
+        }
+        
+        .modal-content img {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .refresh-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .refresh-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .loading {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📷 SmartPneu Studio</h1>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-value" id="pending-count">0</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="processing-count">0</div>
+                    <div class="stat-label">Processing</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="completed-count">0</div>
+                    <div class="stat-label">Completed</div>
+                </div>
+                <button class="refresh-btn" onclick="loadImages()" title="Refresh">
+                    <svg id="refresh-icon" fill="white" viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" data-status="">All</button>
+            <button class="tab" data-status="pending">Pending</button>
+            <button class="tab" data-status="processing">Processing</button>
+            <button class="tab" data-status="completed">Completed</button>
+            <button class="tab" data-status="failed">Failed</button>
+        </div>
+
+        <div class="upload-area" id="upload-area">
+            <input type="file" id="file-input" accept="image/*" multiple>
+            <p>📁 Drop images here or click to upload manually</p>
+        </div>
+
+        <div class="actions-bar">
+            <span class="selected-count"><span id="selected-count">0</span> selected</span>
+            <div class="sku-input">
+                <input type="text" id="sku-input" placeholder="Enter SKU (e.g., TIR-2024-001)">
+                <button class="btn btn-primary" id="assign-btn" disabled>Assign & Process</button>
+            </div>
+            <button class="btn btn-secondary" id="select-all-btn">Select All</button>
+            <button class="btn btn-danger" id="delete-selected-btn" disabled>Delete Selected</button>
+        </div>
+
+        <div class="image-grid" id="image-grid">
+            <!-- Images will be loaded here -->
+        </div>
+
+        <div class="empty-state" id="empty-state" style="display: none;">
+            <svg fill="#ccc" viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+            <h3>No images in queue</h3>
+            <p>Images from the studio will appear here</p>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="modal" id="image-modal">
+        <div class="modal-content">
+            <h2>Image Details</h2>
+            <img id="modal-image" src="">
+            <p><strong>Status:</strong> <span id="modal-status"></span></p>
+            <p><strong>SKU:</strong> <span id="modal-sku">-</span></p>
+            <p><strong>Created:</strong> <span id="modal-created"></span></p>
+            <p id="modal-error" style="color: #f44336; display: none;"><strong>Error:</strong> <span id="modal-error-text"></span></p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+                <button class="btn btn-danger" id="modal-delete-btn">Delete</button>
+                <button class="btn btn-primary" id="modal-retry-btn" style="display: none;">Retry</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let images = [];
+        let selectedIds = new Set();
+        let currentFilter = '';
+        let currentModalImage = null;
+
+        // Load images on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadImages();
+            // Auto-refresh every 10 seconds
+            setInterval(loadImages, 10000);
+        });
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentFilter = tab.dataset.status;
+                renderImages();
+            });
+        });
+
+        // File upload handling
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', () => {
+            handleFiles(fileInput.files);
+        });
+
+        async function handleFiles(files) {
+            for (const file of files) {
+                const formData = new FormData();
+                formData.append('image', file);
+
+                try {
+                    const response = await fetch('/api/images/manual-upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        showToast('Image uploaded successfully', 'success');
+                    } else {
+                        showToast(data.error || 'Upload failed', 'error');
+                    }
+                } catch (error) {
+                    showToast('Upload failed: ' + error.message, 'error');
+                }
+            }
+            loadImages();
+        }
+
+        // Load images from API
+        async function loadImages() {
+            const refreshIcon = document.getElementById('refresh-icon');
+            refreshIcon.classList.add('loading');
+
+            try {
+                const response = await fetch('/api/images');
+                images = await response.json();
+                updateStats();
+                renderImages();
+            } catch (error) {
+                showToast('Failed to load images', 'error');
+            } finally {
+                refreshIcon.classList.remove('loading');
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('pending-count').textContent = 
+                images.filter(i => i.status === 'pending').length;
+            document.getElementById('processing-count').textContent = 
+                images.filter(i => ['assigned', 'processing', 'processed'].includes(i.status)).length;
+            document.getElementById('completed-count').textContent = 
+                images.filter(i => i.status === 'completed').length;
+        }
+
+        function renderImages() {
+            const grid = document.getElementById('image-grid');
+            const emptyState = document.getElementById('empty-state');
+            
+            let filtered = images;
+            if (currentFilter) {
+                filtered = images.filter(i => i.status === currentFilter);
+            }
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            grid.innerHTML = filtered.map(img => `
+                <div class="image-card ${selectedIds.has(img.id) ? 'selected' : ''}" 
+                     data-id="${img.id}"
+                     onclick="toggleSelect(${img.id}, event)">
+                    <div class="checkbox">${selectedIds.has(img.id) ? '✓' : ''}</div>
+                    ${img.sku ? `<div class="sku-badge">${img.sku}</div>` : ''}
+                    <img src="${img.processed_url || img.original_url}" alt="Tire image">
+                    <button class="delete-btn" onclick="deleteImage(${img.id}, event)">✕</button>
+                    <div class="info">
+                        <span class="status status-${img.status}">${img.status}</span>
+                        <div class="time">${formatDate(img.created_at)}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function toggleSelect(id, event) {
+            if (event.target.classList.contains('delete-btn')) return;
+            
+            // Double-click to open modal
+            if (event.detail === 2) {
+                openModal(id);
+                return;
+            }
+
+            if (selectedIds.has(id)) {
+                selectedIds.delete(id);
+            } else {
+                selectedIds.add(id);
+            }
+            updateSelection();
+            renderImages();
+        }
+
+        function updateSelection() {
+            const count = selectedIds.size;
+            document.getElementById('selected-count').textContent = count;
+            document.getElementById('assign-btn').disabled = count === 0;
+            document.getElementById('delete-selected-btn').disabled = count === 0;
+        }
+
+        // Select all visible pending images
+        document.getElementById('select-all-btn').addEventListener('click', () => {
+            const pendingImages = images.filter(i => i.status === 'pending');
+            if (selectedIds.size === pendingImages.length) {
+                selectedIds.clear();
+            } else {
+                pendingImages.forEach(i => selectedIds.add(i.id));
+            }
+            updateSelection();
+            renderImages();
+        });
+
+        // Assign SKU
+        document.getElementById('assign-btn').addEventListener('click', async () => {
+            const sku = document.getElementById('sku-input').value.trim();
+            if (!sku) {
+                showToast('Please enter a SKU', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/assign', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_ids: Array.from(selectedIds),
+                        sku: sku
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    selectedIds.clear();
+                    document.getElementById('sku-input').value = '';
+                    updateSelection();
+                    loadImages();
+                } else {
+                    showToast(data.error, 'error');
+                }
+            } catch (error) {
+                showToast('Failed to assign SKU', 'error');
+            }
+        });
+
+        // Delete selected
+        document.getElementById('delete-selected-btn').addEventListener('click', async () => {
+            if (!confirm(`Delete ${selectedIds.size} image(s)?`)) return;
+
+            for (const id of selectedIds) {
+                await deleteImageById(id);
+            }
+            selectedIds.clear();
+            updateSelection();
+            loadImages();
+        });
+
+        async function deleteImage(id, event) {
+            event.stopPropagation();
+            if (!confirm('Delete this image?')) return;
+            await deleteImageById(id);
+            loadImages();
+        }
+
+        async function deleteImageById(id) {
+            try {
+                await fetch(`/api/images/${id}`, { method: 'DELETE' });
+            } catch (error) {
+                showToast('Failed to delete image', 'error');
+            }
+        }
+
+        // Modal
+        function openModal(id) {
+            const img = images.find(i => i.id === id);
+            if (!img) return;
+
+            currentModalImage = img;
+            document.getElementById('modal-image').src = img.processed_url || img.original_url;
+            document.getElementById('modal-status').textContent = img.status;
+            document.getElementById('modal-sku').textContent = img.sku || '-';
+            document.getElementById('modal-created').textContent = formatDate(img.created_at);
+            
+            const errorEl = document.getElementById('modal-error');
+            if (img.error_message) {
+                document.getElementById('modal-error-text').textContent = img.error_message;
+                errorEl.style.display = 'block';
+            } else {
+                errorEl.style.display = 'none';
+            }
+
+            document.getElementById('modal-retry-btn').style.display = 
+                img.status === 'failed' ? 'inline-block' : 'none';
+
+            document.getElementById('image-modal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('image-modal').classList.remove('show');
+            currentModalImage = null;
+        }
+
+        document.getElementById('modal-delete-btn').addEventListener('click', async () => {
+            if (currentModalImage) {
+                await deleteImageById(currentModalImage.id);
+                closeModal();
+                loadImages();
+            }
+        });
+
+        document.getElementById('modal-retry-btn').addEventListener('click', async () => {
+            if (currentModalImage) {
+                try {
+                    await fetch(`/api/images/${currentModalImage.id}/retry`, { method: 'POST' });
+                    showToast('Retrying processing...', 'success');
+                    closeModal();
+                    loadImages();
+                } catch (error) {
+                    showToast('Failed to retry', 'error');
+                }
+            }
+        });
+
+        // Close modal on outside click
+        document.getElementById('image-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'image-modal') closeModal();
+        });
+
+        // Toast notification
+        function showToast(message, type = '') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show ' + type;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleString();
+        }
+
+        // Keyboard shortcut: Enter to assign
+        document.getElementById('sku-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && selectedIds.size > 0) {
+                document.getElementById('assign-btn').click();
+            }
+        });
+    </script>
+</body>
+</html>
