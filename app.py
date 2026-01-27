@@ -2,11 +2,10 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for
 from datetime import datetime
 from config import Config
 from models import db, Image
-from storage import GCSStorage
+from storage import CloudinaryStorage
 from processing import ImageProcessor
 from shopify_client import ShopifyClient
 import threading
-from storage import CloudinaryStorage
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -78,7 +77,7 @@ def upload_image():
         # Read file data
         file_data = file.read()
         
-        # Upload to GCS
+        # Upload to Cloudinary
         storage = get_storage()
         original_url = storage.upload_image(file_data, file.filename)
         
@@ -121,13 +120,13 @@ def get_images():
 
 @app.route('/api/images/<int:image_id>', methods=['DELETE'])
 def delete_image(image_id):
-    """Delete an image from the queue and GCS."""
+    """Delete an image from the queue and Cloudinary."""
     image = Image.query.get_or_404(image_id)
     
     try:
         storage = get_storage()
         
-        # Delete from GCS
+        # Delete from Cloudinary
         if image.original_url:
             storage.delete_image(image.original_url)
         if image.processed_url:
@@ -241,7 +240,7 @@ def process_images(image_ids, app):
                 # Process image (bg removal + crop)
                 processed_data = processor.process(original_data)
                 
-                # Upload processed image to GCS
+                # Upload processed image to Cloudinary
                 processed_url = storage.upload_processed_image(processed_data, image.original_filename)
                 
                 image.processed_url = processed_url
