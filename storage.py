@@ -1,53 +1,47 @@
-from google.cloud import storage
-from google.oauth2 import service_account
-import json
-import os
+import cloudinary
+import cloudinary.uploader
 from datetime import datetime
 import uuid
 
-class GCSStorage:
-    def __init__(self, bucket_name, credentials_json=None):
-        self.bucket_name = bucket_name
-        
-        if credentials_json:
-            # Parse credentials from JSON string (for Railway env var)
-            credentials_dict = json.loads(credentials_json)
-            credentials = service_account.Credentials.from_service_account_info(credentials_dict)
-            self.client = storage.Client(credentials=credentials, project=credentials_dict.get('project_id'))
-        else:
-            # Use default credentials (for local dev with gcloud auth)
-            self.client = storage.Client()
-        
-        self.bucket = self.client.bucket(bucket_name)
+class CloudinaryStorage:
+    def __init__(self, cloud_name, api_key, api_secret):
+        cloudinary.config(
+            cloud_name=cloud_name,
+            api_key=api_key,
+            api_secret=api_secret,
+            secure=True
+        )
     
     def upload_image(self, file_data, filename, folder='originals'):
-        """Upload an image to GCS and return the public URL."""
-        # Generate unique filename to avoid collisions
+        """Upload an image to Cloudinary and return the URL."""
         timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
         unique_id = uuid.uuid4().hex[:8]
-        ext = os.path.splitext(filename)[1] or '.jpg'
-        blob_name = f"{folder}/{timestamp}_{unique_id}{ext}"
+        public_id = f"smartpneu/{folder}/{timestamp}_{unique_id}"
         
-        blob = self.bucket.blob(blob_name)
-        blob.upload_from_string(file_data, content_type='image/jpeg')
+        result = cloudinary.uploader.upload(
+            file_data,
+            public_id=public_id,
+            resource_type="image"
+        )
         
-        # Make publicly readable
-        blob.make_public()
-        
-        return blob.public_url
+        return result['secure_url']
     
     def upload_processed_image(self, file_data, original_filename):
         """Upload a processed image to the 'processed' folder."""
         return self.upload_image(file_data, original_filename, folder='processed')
     
     def delete_image(self, url):
-        """Delete an image from GCS by its URL."""
+        """Delete an image from Cloudinary by its URL."""
         try:
-            # Extract blob name from URL
-            # URL format: https://storage.googleapis.com/bucket-name/blob-name
-            blob_name = url.split(f'{self.bucket_name}/')[-1]
-            blob = self.bucket.blob(blob_name)
-            blob.delete()
+            # Extract public_id from URL
+            # URL format: https://res.cloudinary.com/cloud_name/image/upload/v123/public_id.jpg
+            parts = url.split('/upload/')
+            if len(parts) > 1:
+                public_id = parts[1].rsplit('.', 1)[0]  # Remove extension
+                # Remove version if present (v123456/)
+                if public_id.startswith('v') and '/' in public_id:
+                    public_id = public_id.split('/', 1)[1]
+                cloudinary.uploader.destroy(public_id)
             return True
         except Exception as e:
             print(f"Error deleting image: {e}")

@@ -6,6 +6,7 @@ from storage import GCSStorage
 from processing import ImageProcessor
 from shopify_client import ShopifyClient
 import threading
+from storage import CloudinaryStorage
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -21,9 +22,10 @@ _shopify = None
 def get_storage():
     global _storage
     if _storage is None:
-        _storage = GCSStorage(
-            Config.GCS_BUCKET_NAME,
-            Config.GCS_CREDENTIALS_JSON
+        _storage = CloudinaryStorage(
+            Config.CLOUDINARY_CLOUD_NAME,
+            Config.CLOUDINARY_API_KEY,
+            Config.CLOUDINARY_API_SECRET
         )
     return _storage
 
