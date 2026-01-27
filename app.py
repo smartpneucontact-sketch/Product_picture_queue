@@ -203,7 +203,7 @@ def assign_sku():
     db.session.commit()
     
     # Start processing in background thread
-    thread = threading.Thread(target=process_images, args=(image_ids, app._get_current_object()))
+    thread = threading.Thread(target=process_images, args=(image_ids, app))
     thread.start()
     
     return jsonify({
@@ -290,7 +290,7 @@ def retry_image(image_id):
     db.session.commit()
     
     # Start processing
-    thread = threading.Thread(target=process_images, args=([image_id], app._get_current_object()))
+    thread = threading.Thread(target=process_images, args=([image_id], app))
     thread.start()
     
     return jsonify({'success': True})
