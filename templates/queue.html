@@ -99,18 +99,14 @@
         .sku-input {
             display: flex;
             gap: 10px;
-            align-items: center;
-            flex: 1;
-            min-width: 300px;
         }
         
         .sku-input input {
-            flex: 1;
-            padding: 12px 16px;
+            padding: 10px 15px;
             border: 2px solid #e0e0e0;
             border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.2s;
+            font-size: 14px;
+            width: 200px;
         }
         
         .sku-input input:focus {
@@ -119,27 +115,22 @@
         }
         
         .btn {
-            padding: 12px 24px;
+            padding: 10px 20px;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 500;
             transition: all 0.2s;
         }
         
         .btn-primary {
-            background: #4CAF50;
+            background: #1a1a2e;
             color: white;
         }
         
-        .btn-primary:hover {
-            background: #43A047;
-        }
-        
-        .btn-primary:disabled {
-            background: #ccc;
-            cursor: not-allowed;
+        .btn-primary:hover:not(:disabled) {
+            background: #2a2a4e;
         }
         
         .btn-secondary {
@@ -160,34 +151,39 @@
             background: #d32f2f;
         }
         
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
         .selected-count {
             font-size: 14px;
             color: #666;
-            min-width: 120px;
         }
         
         .image-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 15px;
+            gap: 20px;
         }
         
         .image-card {
             background: white;
             border-radius: 12px;
             overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             cursor: pointer;
             transition: all 0.2s;
             position: relative;
         }
         
         .image-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(-4px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
         }
         
         .image-card.selected {
-            outline: 3px solid #4CAF50;
+            box-shadow: 0 0 0 3px #4CAF50;
         }
         
         .image-card img {
@@ -197,40 +193,10 @@
         }
         
         .image-card .info {
-            padding: 10px;
-        }
-        
-        .image-card .time {
-            font-size: 12px;
-            color: #888;
-        }
-        
-        .image-card .status {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        
-        .status-pending { background: #FFF3E0; color: #E65100; }
-        .status-assigned { background: #E3F2FD; color: #1565C0; }
-        .status-processing { background: #F3E5F5; color: #7B1FA2; }
-        .status-processed { background: #E8F5E9; color: #2E7D32; }
-        .status-completed { background: #E8F5E9; color: #2E7D32; }
-        .status-failed { background: #FFEBEE; color: #C62828; }
-        
-        .image-card .sku-badge {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0,0,0,0.7);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
         .image-card .checkbox {
@@ -244,13 +210,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        
-        .image-card:hover .checkbox,
-        .image-card.selected .checkbox {
-            opacity: 1;
+            font-size: 14px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
         
         .image-card.selected .checkbox {
@@ -260,15 +221,36 @@
         
         .image-card .delete-btn {
             position: absolute;
-            bottom: 50px;
+            top: 10px;
             right: 10px;
-            width: 30px;
-            height: 30px;
+            width: 28px;
+            height: 28px;
             background: rgba(244, 67, 54, 0.9);
             color: white;
             border: none;
             border-radius: 50%;
             cursor: pointer;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .image-card:hover .delete-btn {
+            opacity: 1;
+        }
+        
+        .image-card .preview-btn {
+            position: absolute;
+            top: 10px;
+            right: 45px;
+            width: 28px;
+            height: 28px;
+            background: rgba(26, 26, 46, 0.9);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
             opacity: 0;
             transition: opacity 0.2s;
             display: flex;
@@ -276,16 +258,52 @@
             justify-content: center;
         }
         
-        .image-card:hover .delete-btn {
+        .image-card:hover .preview-btn {
             opacity: 1;
+        }
+        
+        .image-card .sku-badge {
+            position: absolute;
+            bottom: 50px;
+            left: 10px;
+            right: 10px;
+            background: rgba(26, 26, 46, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .status {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-pending { background: #FFF3E0; color: #E65100; }
+        .status-assigned { background: #E3F2FD; color: #1565C0; }
+        .status-processing { background: #E8F5E9; color: #2E7D32; }
+        .status-processed { background: #E8F5E9; color: #2E7D32; }
+        .status-completed { background: #E8F5E9; color: #2E7D32; }
+        .status-failed { background: #FFEBEE; color: #C62828; }
+        
+        .time {
+            font-size: 11px;
+            color: #888;
         }
         
         .upload-area {
             border: 2px dashed #ccc;
             border-radius: 12px;
-            padding: 40px;
+            padding: 30px;
             text-align: center;
-            background: white;
             margin-bottom: 20px;
             cursor: pointer;
             transition: all 0.2s;
@@ -293,7 +311,7 @@
         
         .upload-area:hover {
             border-color: #1a1a2e;
-            background: #fafafa;
+            background: #f9f9f9;
         }
         
         .upload-area.dragover {
@@ -327,13 +345,14 @@
             padding: 16px 24px;
             border-radius: 8px;
             display: none;
-            z-index: 1000;
+            z-index: 1001;
         }
         
         .toast.success { background: #4CAF50; }
         .toast.error { background: #f44336; }
         .toast.show { display: block; }
         
+        /* Details Modal */
         .modal {
             position: fixed;
             inset: 0;
@@ -369,6 +388,142 @@
             gap: 10px;
             justify-content: flex-end;
             margin-top: 20px;
+        }
+
+        /* Large Preview Lightbox */
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.95);
+            display: none;
+            flex-direction: column;
+            z-index: 2000;
+        }
+        
+        .lightbox.show { display: flex; }
+        
+        .lightbox-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            color: white;
+        }
+        
+        .lightbox-header h3 {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        .lightbox-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 32px;
+            cursor: pointer;
+            padding: 0 10px;
+        }
+        
+        .lightbox-body {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .lightbox-image-container {
+            max-width: 90%;
+            max-height: 80vh;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .lightbox-image-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .lightbox-image-wrapper img {
+            max-width: 100%;
+            max-height: 70vh;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+        
+        .lightbox-image-wrapper .image-label {
+            color: #aaa;
+            font-size: 14px;
+            margin-top: 10px;
+            text-transform: uppercase;
+        }
+        
+        .lightbox-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            font-size: 48px;
+            padding: 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .lightbox-nav:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .lightbox-nav.prev { left: 10px; }
+        .lightbox-nav.next { right: 10px; }
+        
+        .lightbox-footer {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            color: white;
+        }
+        
+        .lightbox-info {
+            display: flex;
+            gap: 30px;
+            font-size: 14px;
+        }
+        
+        .lightbox-info span {
+            color: #888;
+        }
+        
+        .lightbox-counter {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        .lightbox-toggle {
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
+        }
+        
+        .lightbox-toggle button {
+            padding: 8px 16px;
+            border: 1px solid #555;
+            background: transparent;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        
+        .lightbox-toggle button.active {
+            background: white;
+            color: #333;
         }
 
         .refresh-btn {
@@ -458,6 +613,7 @@
 
     <div class="toast" id="toast"></div>
 
+    <!-- Details Modal -->
     <div class="modal" id="image-modal">
         <div class="modal-content">
             <h2>Image Details</h2>
@@ -474,11 +630,47 @@
         </div>
     </div>
 
+    <!-- Large Preview Lightbox -->
+    <div class="lightbox" id="lightbox">
+        <div class="lightbox-header">
+            <h3 id="lightbox-title">Image Preview</h3>
+            <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+        </div>
+        <div class="lightbox-body">
+            <button class="lightbox-nav prev" onclick="lightboxPrev()">&#8249;</button>
+            <div class="lightbox-image-container" id="lightbox-container">
+                <div class="lightbox-image-wrapper" id="lightbox-original-wrapper">
+                    <img id="lightbox-original" src="">
+                    <div class="image-label">Original</div>
+                </div>
+                <div class="lightbox-image-wrapper" id="lightbox-processed-wrapper" style="display:none;">
+                    <img id="lightbox-processed" src="">
+                    <div class="image-label">Processed</div>
+                </div>
+            </div>
+            <button class="lightbox-nav next" onclick="lightboxNext()">&#8250;</button>
+        </div>
+        <div class="lightbox-footer">
+            <div class="lightbox-info">
+                <div><span>SKU:</span> <strong id="lightbox-sku">-</strong></div>
+                <div><span>Status:</span> <strong id="lightbox-status">-</strong></div>
+                <div class="lightbox-counter" id="lightbox-counter">1 / 10</div>
+            </div>
+            <div class="lightbox-toggle">
+                <button id="toggle-original" class="active" onclick="showOriginal()">Original</button>
+                <button id="toggle-processed" onclick="showProcessed()">Processed</button>
+                <button id="toggle-both" onclick="showBoth()">Both</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let images = [];
         let selectedIds = new Set();
         let currentFilter = '';
         let currentModalImage = null;
+        let currentLightboxIndex = 0;
+        let lightboxViewMode = 'original'; // 'original', 'processed', 'both'
 
         // Load images on page load
         document.addEventListener('DOMContentLoaded', () => {
@@ -587,13 +779,14 @@
             }
 
             emptyState.style.display = 'none';
-            grid.innerHTML = filtered.map(img => `
+            grid.innerHTML = filtered.map((img, index) => `
                 <div class="image-card ${selectedIds.has(img.id) ? 'selected' : ''}" 
                      data-id="${img.id}"
                      onclick="toggleSelect(${img.id}, event)">
                     <div class="checkbox">${selectedIds.has(img.id) ? '✓' : ''}</div>
                     ${img.sku ? `<div class="sku-badge">${img.sku}</div>` : ''}
                     <img src="${img.processed_url || img.original_url}" alt="Tire image">
+                    <button class="preview-btn" onclick="openLightbox(${img.id}, event)" title="Preview">🔍</button>
                     <button class="delete-btn" onclick="deleteImage(${img.id}, event)">✕</button>
                     <div class="info">
                         <span class="status status-${img.status}">${img.status}</span>
@@ -604,7 +797,8 @@
         }
 
         function toggleSelect(id, event) {
-            if (event.target.classList.contains('delete-btn')) return;
+            if (event.target.classList.contains('delete-btn') || 
+                event.target.classList.contains('preview-btn')) return;
             
             // Double-click to open modal
             if (event.detail === 2) {
@@ -699,7 +893,7 @@
             }
         }
 
-        // Modal
+        // Details Modal
         function openModal(id) {
             const img = images.find(i => i.id === id);
             if (!img) return;
@@ -753,6 +947,119 @@
         // Close modal on outside click
         document.getElementById('image-modal').addEventListener('click', (e) => {
             if (e.target.id === 'image-modal') closeModal();
+        });
+
+        // ========== LIGHTBOX FUNCTIONS ==========
+        function getFilteredImages() {
+            if (currentFilter) {
+                return images.filter(i => i.status === currentFilter);
+            }
+            return images;
+        }
+
+        function openLightbox(id, event) {
+            if (event) event.stopPropagation();
+            
+            const filtered = getFilteredImages();
+            const index = filtered.findIndex(i => i.id === id);
+            if (index === -1) return;
+            
+            currentLightboxIndex = index;
+            updateLightbox();
+            document.getElementById('lightbox').classList.add('show');
+        }
+
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('show');
+        }
+
+        function updateLightbox() {
+            const filtered = getFilteredImages();
+            const img = filtered[currentLightboxIndex];
+            if (!img) return;
+
+            // Update images
+            document.getElementById('lightbox-original').src = img.original_url;
+            document.getElementById('lightbox-processed').src = img.processed_url || img.original_url;
+            
+            // Update info
+            document.getElementById('lightbox-title').textContent = img.sku || 'Image Preview';
+            document.getElementById('lightbox-sku').textContent = img.sku || '-';
+            document.getElementById('lightbox-status').textContent = img.status;
+            document.getElementById('lightbox-counter').textContent = 
+                `${currentLightboxIndex + 1} / ${filtered.length}`;
+
+            // Update view based on mode and availability
+            const hasProcessed = img.processed_url && img.processed_url !== img.original_url;
+            document.getElementById('toggle-processed').disabled = !hasProcessed;
+            document.getElementById('toggle-both').disabled = !hasProcessed;
+
+            applyViewMode();
+        }
+
+        function lightboxPrev() {
+            const filtered = getFilteredImages();
+            currentLightboxIndex = (currentLightboxIndex - 1 + filtered.length) % filtered.length;
+            updateLightbox();
+        }
+
+        function lightboxNext() {
+            const filtered = getFilteredImages();
+            currentLightboxIndex = (currentLightboxIndex + 1) % filtered.length;
+            updateLightbox();
+        }
+
+        function showOriginal() {
+            lightboxViewMode = 'original';
+            updateToggleButtons();
+            applyViewMode();
+        }
+
+        function showProcessed() {
+            lightboxViewMode = 'processed';
+            updateToggleButtons();
+            applyViewMode();
+        }
+
+        function showBoth() {
+            lightboxViewMode = 'both';
+            updateToggleButtons();
+            applyViewMode();
+        }
+
+        function updateToggleButtons() {
+            document.getElementById('toggle-original').classList.toggle('active', lightboxViewMode === 'original');
+            document.getElementById('toggle-processed').classList.toggle('active', lightboxViewMode === 'processed');
+            document.getElementById('toggle-both').classList.toggle('active', lightboxViewMode === 'both');
+        }
+
+        function applyViewMode() {
+            const originalWrapper = document.getElementById('lightbox-original-wrapper');
+            const processedWrapper = document.getElementById('lightbox-processed-wrapper');
+
+            if (lightboxViewMode === 'original') {
+                originalWrapper.style.display = 'flex';
+                processedWrapper.style.display = 'none';
+            } else if (lightboxViewMode === 'processed') {
+                originalWrapper.style.display = 'none';
+                processedWrapper.style.display = 'flex';
+            } else { // both
+                originalWrapper.style.display = 'flex';
+                processedWrapper.style.display = 'flex';
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            const lightbox = document.getElementById('lightbox');
+            if (!lightbox.classList.contains('show')) return;
+
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') lightboxPrev();
+            if (e.key === 'ArrowRight') lightboxNext();
+            if (e.key === '1') showOriginal();
+            if (e.key === '2') showProcessed();
+            if (e.key === '3') showBoth();
         });
 
         // Toast notification
