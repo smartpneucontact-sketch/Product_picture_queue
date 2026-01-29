@@ -1,27 +1,30 @@
 import requests
 from PIL import Image
 from io import BytesIO
+from rembg import remove
 
 class ImageProcessor:
-    def __init__(self, removebg_api_key, output_size=1000):
-        self.removebg_api_key = removebg_api_key
+    def __init__(self, removebg_api_key=None, output_size=1000):
+        # removebg_api_key kept for compatibility but not used
         self.output_size = output_size  # Final image will be output_size x output_size
     
     def remove_background(self, image_data):
         """
-        Send image to remove.bg API and return the result with transparent background.
+        Remove background using rembg (free, local processing).
+        Returns PNG with transparent background.
         """
-        response = requests.post(
-            'https://api.remove.bg/v1.0/removebg',
-            files={'image_file': ('image.jpg', image_data, 'image/jpeg')},
-            data={'size': 'auto', 'format': 'png'},
-            headers={'X-Api-Key': self.removebg_api_key},
-        )
+        # Open image
+        input_image = Image.open(BytesIO(image_data))
         
-        if response.status_code == requests.codes.ok:
-            return response.content
-        else:
-            raise Exception(f"remove.bg API error: {response.status_code} - {response.text}")
+        # Remove background
+        output_image = remove(input_image)
+        
+        # Convert to bytes
+        output_buffer = BytesIO()
+        output_image.save(output_buffer, format='PNG')
+        output_buffer.seek(0)
+        
+        return output_buffer.getvalue()
     
     def crop_to_square(self, image_data):
         """
@@ -54,7 +57,7 @@ class ImageProcessor:
         margin = int(max_dim * 0.05)
         square_size = max_dim + (margin * 2)
         
-        # Create new square image with transparent background
+        # Create new square image with white background
         square_img = Image.new('RGBA', (square_size, square_size), (255, 255, 255, 255))
         
         # Calculate position to center the cropped image
@@ -81,7 +84,7 @@ class ImageProcessor:
     def process(self, image_data):
         """
         Full processing pipeline:
-        1. Remove background
+        1. Remove background (free, local)
         2. Crop to 1:1 with tire as large as possible
         """
         # Step 1: Remove background

@@ -6,3 +6,4 @@ requests==2.31.0
 pillow>=10.4.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
+rembg==2.0.50
