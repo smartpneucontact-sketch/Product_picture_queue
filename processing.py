@@ -13,7 +13,7 @@ def get_rembg():
     return _rembg_remove
 
 class ImageProcessor:
-    def __init__(self, removebg_api_key=None, output_size=1000):
+    def __init__(self, removebg_api_key=None, output_size=2048):
         # removebg_api_key kept for compatibility but not used
         self.output_size = output_size  # Final image will be output_size x output_size
     
@@ -41,7 +41,7 @@ class ImageProcessor:
         Crop image to 1:1 aspect ratio with the subject (tire) as large as possible.
         - Finds the bounding box of non-transparent pixels
         - Centers and pads to square
-        - Resizes to output_size
+        - Resizes to output_size (only if larger, to preserve quality)
         """
         img = Image.open(BytesIO(image_data))
         
@@ -77,16 +77,20 @@ class ImageProcessor:
         # Paste cropped image onto square canvas
         square_img.paste(img_cropped, (x_offset, y_offset), img_cropped)
         
-        # Resize to final output size
-        final_img = square_img.resize((self.output_size, self.output_size), Image.Resampling.LANCZOS)
+        # Only resize if the image is larger than output_size (preserve quality for smaller images)
+        if square_size > self.output_size:
+            final_img = square_img.resize((self.output_size, self.output_size), Image.Resampling.LANCZOS)
+        else:
+            # Keep original size if already smaller than target
+            final_img = square_img
         
         # Convert to RGB (white background) for JPEG output
         rgb_img = Image.new('RGB', final_img.size, (255, 255, 255))
         rgb_img.paste(final_img, mask=final_img.split()[3])  # Use alpha channel as mask
         
-        # Save to bytes
+        # Save to bytes with maximum quality
         output = BytesIO()
-        rgb_img.save(output, format='JPEG', quality=95)
+        rgb_img.save(output, format='JPEG', quality=98, subsampling=0)  # subsampling=0 = 4:4:4 (best quality)
         output.seek(0)
         
         return output.getvalue()

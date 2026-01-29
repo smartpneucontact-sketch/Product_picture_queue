@@ -28,4 +28,4 @@ class Config:
     UPLOAD_SECRET = os.environ.get('UPLOAD_SECRET', 'change-me-in-production')
     
     # Processing settings
-    OUTPUT_IMAGE_SIZE = 1000
+    OUTPUT_IMAGE_SIZE = int(os.environ.get('OUTPUT_IMAGE_SIZE', 2048))  # Shopify recommends 2048x2048
