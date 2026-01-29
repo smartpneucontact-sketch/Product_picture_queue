@@ -526,6 +526,17 @@
             color: #333;
         }
 
+        .lightbox-downloads {
+            display: flex;
+            gap: 10px;
+        }
+
+        .lightbox-downloads button {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
         .refresh-btn {
             background: none;
             border: none;
@@ -592,6 +603,7 @@
 
         <div class="actions-bar">
             <span class="selected-count"><span id="selected-count">0</span> selected</span>
+            <button class="btn btn-secondary" id="process-only-btn" disabled>⚙️ Process Only</button>
             <div class="sku-input">
                 <input type="text" id="sku-input" placeholder="Enter SKU (e.g., TIR-2024-001)">
                 <button class="btn btn-primary" id="assign-btn" disabled>Assign & Process</button>
@@ -655,6 +667,10 @@
                 <div><span>SKU:</span> <strong id="lightbox-sku">-</strong></div>
                 <div><span>Status:</span> <strong id="lightbox-status">-</strong></div>
                 <div class="lightbox-counter" id="lightbox-counter">1 / 10</div>
+            </div>
+            <div class="lightbox-downloads">
+                <button class="btn btn-secondary" id="download-original-btn" onclick="downloadOriginal()">⬇️ Original</button>
+                <button class="btn btn-secondary" id="download-processed-btn" onclick="downloadProcessed()" disabled>⬇️ Processed</button>
             </div>
             <div class="lightbox-toggle">
                 <button id="toggle-original" class="active" onclick="showOriginal()">Original</button>
@@ -819,6 +835,7 @@
             const count = selectedIds.size;
             document.getElementById('selected-count').textContent = count;
             document.getElementById('assign-btn').disabled = count === 0;
+            document.getElementById('process-only-btn').disabled = count === 0;
             document.getElementById('delete-selected-btn').disabled = count === 0;
         }
 
@@ -863,6 +880,30 @@
                 }
             } catch (error) {
                 showToast('Failed to assign SKU', 'error');
+            }
+        });
+
+        // Process Only (no SKU assignment)
+        document.getElementById('process-only-btn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_ids: Array.from(selectedIds)
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    selectedIds.clear();
+                    updateSelection();
+                    loadImages();
+                } else {
+                    showToast(data.error, 'error');
+                }
+            } catch (error) {
+                showToast('Failed to start processing', 'error');
             }
         });
 
@@ -993,6 +1034,7 @@
             const hasProcessed = img.processed_url && img.processed_url !== img.original_url;
             document.getElementById('toggle-processed').disabled = !hasProcessed;
             document.getElementById('toggle-both').disabled = !hasProcessed;
+            document.getElementById('download-processed-btn').disabled = !hasProcessed;
 
             applyViewMode();
         }
@@ -1046,6 +1088,44 @@
             } else { // both
                 originalWrapper.style.display = 'flex';
                 processedWrapper.style.display = 'flex';
+            }
+        }
+
+        // Download functions
+        function downloadOriginal() {
+            const filtered = getFilteredImages();
+            const img = filtered[currentLightboxIndex];
+            if (!img || !img.original_url) return;
+            
+            downloadImage(img.original_url, `original_${img.id}_${img.original_filename || 'image.jpg'}`);
+        }
+
+        function downloadProcessed() {
+            const filtered = getFilteredImages();
+            const img = filtered[currentLightboxIndex];
+            if (!img || !img.processed_url) return;
+            
+            const filename = img.sku 
+                ? `${img.sku}_processed_${img.id}.jpg`
+                : `processed_${img.id}_${img.original_filename || 'image.jpg'}`;
+            downloadImage(img.processed_url, filename);
+        }
+
+        async function downloadImage(url, filename) {
+            try {
+                const response = await fetch(url);
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(downloadUrl);
+                showToast('Download started', 'success');
+            } catch (error) {
+                showToast('Download failed: ' + error.message, 'error');
             }
         }
 

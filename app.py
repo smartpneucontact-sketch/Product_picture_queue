@@ -203,7 +203,7 @@ def assign_sku():
     db.session.commit()
     
     # Start processing in background thread
-    thread = threading.Thread(target=process_images, args=(image_ids, app))
+    thread = threading.Thread(target=process_images, args=(image_ids, app, True))
     thread.start()
     
     return jsonify({
@@ -212,12 +212,41 @@ def assign_sku():
     })
 
 
-def process_images(image_ids, app):
-    """Background task to process images and upload to Shopify."""
+@app.route('/api/process', methods=['POST'])
+def process_only():
+    """
+    Process selected images without SKU assignment (no Shopify upload).
+    Expects: {'image_ids': [1, 2, 3]}
+    """
+    data = request.get_json()
+    image_ids = data.get('image_ids', [])
+    
+    if not image_ids:
+        return jsonify({'error': 'No images selected'}), 400
+    
+    # Update images status
+    images = Image.query.filter(Image.id.in_(image_ids)).all()
+    
+    for image in images:
+        image.status = 'assigned'  # Reuse status for processing queue
+    
+    db.session.commit()
+    
+    # Start processing in background thread (without Shopify upload)
+    thread = threading.Thread(target=process_images, args=(image_ids, app, False))
+    thread.start()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Processing {len(images)} images'
+    })
+
+
+def process_images(image_ids, app, upload_to_shopify=True):
+    """Background task to process images and optionally upload to Shopify."""
     with app.app_context():
         processor = get_processor()
         storage = get_storage()
-        shopify = get_shopify()
         
         images = Image.query.filter(Image.id.in_(image_ids)).all()
         
@@ -255,9 +284,10 @@ def process_images(image_ids, app):
                 image.error_message = str(e)
                 db.session.commit()
         
-        # Upload all processed images to Shopify
-        if processed_urls:
+        # Upload all processed images to Shopify (only if SKU assigned and flag is True)
+        if upload_to_shopify and sku and processed_urls:
             try:
+                shopify = get_shopify()
                 result = shopify.add_images_to_product_by_sku(sku, processed_urls)
                 
                 # Mark all as completed
@@ -272,6 +302,12 @@ def process_images(image_ids, app):
                         image.status = 'failed'
                         image.error_message = f"Shopify upload failed: {str(e)}"
                 db.session.commit()
+        elif not upload_to_shopify:
+            # Mark as completed without Shopify upload
+            for image in images:
+                if image.status == 'processed':
+                    image.status = 'completed'
+            db.session.commit()
 
 
 @app.route('/api/images/<int:image_id>/retry', methods=['POST'])
@@ -282,15 +318,13 @@ def retry_image(image_id):
     if image.status != 'failed':
         return jsonify({'error': 'Image is not in failed status'}), 400
     
-    if not image.sku:
-        return jsonify({'error': 'Image has no SKU assigned'}), 400
-    
     image.status = 'assigned'
     image.error_message = None
     db.session.commit()
     
-    # Start processing
-    thread = threading.Thread(target=process_images, args=([image_id], app))
+    # Start processing (upload to Shopify only if SKU is assigned)
+    upload_to_shopify = bool(image.sku)
+    thread = threading.Thread(target=process_images, args=([image_id], app, upload_to_shopify))
     thread.start()
     
     return jsonify({'success': True})
