@@ -1,7 +1,16 @@
 import requests
 from PIL import Image
 from io import BytesIO
-from rembg import remove
+
+# Lazy load rembg (downloads model on first use)
+_rembg_remove = None
+
+def get_rembg():
+    global _rembg_remove
+    if _rembg_remove is None:
+        from rembg import remove
+        _rembg_remove = remove
+    return _rembg_remove
 
 class ImageProcessor:
     def __init__(self, removebg_api_key=None, output_size=1000):
@@ -16,7 +25,8 @@ class ImageProcessor:
         # Open image
         input_image = Image.open(BytesIO(image_data))
         
-        # Remove background
+        # Remove background (lazy load rembg)
+        remove = get_rembg()
         output_image = remove(input_image)
         
         # Convert to bytes
