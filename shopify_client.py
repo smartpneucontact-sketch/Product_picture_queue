@@ -1,57 +1,103 @@
 import requests
-import base64
 
 class ShopifyClient:
     def __init__(self, store_url, access_token):
         self.store_url = store_url.rstrip('/')
         self.access_token = access_token
-        self.api_version = '2024-01'
-        self.base_url = f"https://{self.store_url}/admin/api/{self.api_version}"
+        self.api_version = '2024-10'
+        self.graphql_url = f"https://{self.store_url}/admin/api/{self.api_version}/graphql.json"
+        self.rest_url = f"https://{self.store_url}/admin/api/{self.api_version}"
         self.headers = {
             'X-Shopify-Access-Token': access_token,
             'Content-Type': 'application/json'
         }
     
+    def _graphql(self, query, variables=None):
+        """Execute a GraphQL query."""
+        payload = {'query': query}
+        if variables:
+            payload['variables'] = variables
+        
+        response = requests.post(self.graphql_url, headers=self.headers, json=payload)
+        
+        if response.status_code != 200:
+            raise Exception(f"Shopify GraphQL error: {response.status_code} - {response.text}")
+        
+        result = response.json()
+        
+        if 'errors' in result:
+            raise Exception(f"Shopify GraphQL error: {result['errors']}")
+        
+        return result.get('data')
+    
     def find_product_by_sku(self, sku):
         """
-        Find a product by its SKU (stored in variant).
-        Returns the product and variant IDs if found.
+        Find a product by its SKU using GraphQL.
+        Returns (product_id, variant_id) as numeric IDs.
         """
-        # Search for variant with this SKU
-        url = f"{self.base_url}/variants.json"
-        params = {'sku': sku}
+        query = """
+        query findProductBySku($query: String!) {
+            productVariants(first: 1, query: $query) {
+                edges {
+                    node {
+                        id
+                        sku
+                        product {
+                            id
+                            title
+                        }
+                    }
+                }
+            }
+        }
+        """
         
-        response = requests.get(url, headers=self.headers, params=params)
+        data = self._graphql(query, {'query': f'sku:{sku}'})
+        edges = data.get('productVariants', {}).get('edges', [])
         
-        if response.status_code != 200:
-            raise Exception(f"Shopify API error: {response.status_code} - {response.text}")
+        if not edges:
+            return None, None, None
         
-        variants = response.json().get('variants', [])
+        node = edges[0]['node']
         
-        if not variants:
-            return None, None
+        # Extract numeric IDs from GID format (gid://shopify/Product/123456)
+        product_gid = node['product']['id']
+        variant_gid = node['id']
+        product_id = product_gid.split('/')[-1]
+        variant_id = variant_gid.split('/')[-1]
+        product_title = node['product']['title']
         
-        variant = variants[0]
-        product_id = variant['product_id']
-        variant_id = variant['id']
-        
-        return product_id, variant_id
+        return product_id, variant_id, product_title
     
-    def get_product(self, product_id):
-        """Get a product by ID."""
-        url = f"{self.base_url}/products/{product_id}.json"
-        response = requests.get(url, headers=self.headers)
+    def get_product_images_count(self, product_id):
+        """Get current number of images on a product."""
+        query = """
+        query getProductImages($id: ID!) {
+            product(id: $id) {
+                images(first: 250) {
+                    edges {
+                        node {
+                            id
+                        }
+                    }
+                }
+            }
+        }
+        """
         
-        if response.status_code != 200:
-            raise Exception(f"Shopify API error: {response.status_code} - {response.text}")
+        product_gid = f"gid://shopify/Product/{product_id}"
+        data = self._graphql(query, {'id': product_gid})
         
-        return response.json().get('product')
+        if not data.get('product'):
+            return 0
+        
+        return len(data['product']['images']['edges'])
     
     def add_image_to_product(self, product_id, image_url, position=None, alt_text=None):
         """
-        Add an image to a product from a URL.
+        Add an image to a product using REST API (more reliable for image uploads).
         """
-        url = f"{self.base_url}/products/{product_id}/images.json"
+        url = f"{self.rest_url}/products/{product_id}/images.json"
         
         payload = {
             'image': {
@@ -77,30 +123,37 @@ class ShopifyClient:
         Add multiple images to a product identified by SKU.
         Returns the product info and added images.
         """
-        product_id, variant_id = self.find_product_by_sku(sku)
+        product_id, variant_id, product_title = self.find_product_by_sku(sku)
         
         if not product_id:
             raise Exception(f"No product found with SKU: {sku}")
         
-        product = self.get_product(product_id)
-        
         # Get current image count to set positions
-        current_image_count = len(product.get('images', []))
+        current_image_count = self.get_product_images_count(product_id)
         
         added_images = []
+        errors = []
+        
         for i, image_url in enumerate(image_urls):
-            position = current_image_count + i + 1
-            image = self.add_image_to_product(
-                product_id, 
-                image_url, 
-                position=position,
-                alt_text=f"{product.get('title', '')} - Image {position}"
-            )
-            added_images.append(image)
+            try:
+                position = current_image_count + i + 1
+                image = self.add_image_to_product(
+                    product_id, 
+                    image_url, 
+                    position=position,
+                    alt_text=f"{product_title} - Image {position}"
+                )
+                added_images.append(image)
+            except Exception as e:
+                errors.append(f"Image {i+1}: {str(e)}")
+        
+        if errors and not added_images:
+            raise Exception(f"All image uploads failed: {'; '.join(errors)}")
         
         return {
             'product_id': product_id,
-            'product_title': product.get('title'),
+            'product_title': product_title,
             'sku': sku,
-            'images_added': len(added_images)
+            'images_added': len(added_images),
+            'errors': errors if errors else None
         }
