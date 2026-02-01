@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartPneu Processing Lab</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 20px 0 30px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 30px;
+        }
+        
+        header h1 { font-size: 28px; margin-bottom: 8px; }
+        header p { color: #888; font-size: 14px; }
+        
+        .back-link {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #4CAF50;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .back-link:hover { text-decoration: underline; }
+        
+        .main-layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 30px;
+        }
+        
+        /* Controls Panel */
+        .controls {
+            background: #252540;
+            border-radius: 12px;
+            padding: 20px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+        
+        .control-section { margin-bottom: 25px; }
+        
+        .control-section h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .control-group { margin-bottom: 18px; }
+        
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        
+        .control-group label span.value {
+            font-family: monospace;
+            background: #1a1a2e;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #1a1a2e;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #4CAF50;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 10px;
+        }
+        
+        .btn-primary { background: #4CAF50; color: white; }
+        .btn-primary:hover { background: #45a049; }
+        .btn-secondary { background: #444; color: white; }
+        .btn-secondary:hover { background: #555; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .btn-sm {
+            width: auto;
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+        
+        /* Days Panel */
+        .days-panel {
+            background: #252540;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .days-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .days-header h2 { font-size: 20px; }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+            color: #888;
+        }
+        
+        .stats span { 
+            background: #1a1a2e;
+            padding: 5px 12px;
+            border-radius: 6px;
+        }
+        
+        /* Day Section */
+        .day-section {
+            background: #1a1a2e;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+        
+        .day-header {
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        
+        .day-header:hover { background: #2a2a4e; }
+        
+        .day-header h3 {
+            font-size: 16px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .day-header .arrow {
+            transition: transform 0.3s;
+            font-size: 12px;
+        }
+        
+        .day-section.open .day-header .arrow {
+            transform: rotate(90deg);
+        }
+        
+        .day-meta {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .day-meta .count {
+            background: #333;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        
+        .day-content {
+            display: none;
+            padding: 0 20px 20px;
+        }
+        
+        .day-section.open .day-content {
+            display: block;
+        }
+        
+        .day-actions {
+            display: flex;
+            gap: 10px;
+            padding: 10px 0 15px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 15px;
+        }
+        
+        /* Image Grid */
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        
+        .image-card {
+            background: #252540;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .image-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+        
+        .image-card.processing {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        
+        .image-compare {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+            background: #333;
+        }
+        
+        .image-compare .img-wrapper {
+            background: #fff;
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .image-compare img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .image-compare .img-label {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            background: rgba(0,0,0,0.7);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        
+        .image-compare .placeholder {
+            color: #999;
+            font-size: 11px;
+        }
+        
+        .image-info {
+            padding: 12px;
+        }
+        
+        .image-info .filename {
+            font-size: 12px;
+            color: #888;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 8px;
+        }
+        
+        .image-info .sku {
+            font-size: 14px;
+            font-weight: 600;
+            color: #4CAF50;
+            margin-bottom: 8px;
+        }
+        
+        .image-info .status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+        
+        .status-pending { background: #ff9800; color: #000; }
+        .status-processing { background: #2196F3; color: #fff; }
+        .status-processed { background: #9C27B0; color: #fff; }
+        .status-completed { background: #4CAF50; color: #fff; }
+        .status-failed { background: #f44336; color: #fff; }
+        
+        .image-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .image-actions .btn {
+            flex: 1;
+            margin: 0;
+            padding: 8px;
+            font-size: 11px;
+        }
+        
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #333;
+            border-top-color: #4CAF50;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #333;
+            padding: 15px 25px;
+            border-radius: 8px;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: #4CAF50; }
+        .toast.error { background: #f44336; }
+        
+        /* Settings Export */
+        .settings-export {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 15px;
+        }
+        
+        .settings-export pre {
+            font-size: 10px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        /* Preview Modal */
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        
+        .modal.show { display: flex; }
+        
+        .modal-content {
+            background: #252540;
+            border-radius: 12px;
+            max-width: 1200px;
+            width: 100%;
+            max-height: 90vh;
+            overflow: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .modal-body { padding: 20px; }
+        
+        .modal-compare {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .modal-compare .img-box {
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .modal-compare img {
+            max-width: 100%;
+            max-height: 60vh;
+            object-fit: contain;
+        }
+        
+        .modal-compare h4 {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-link">← Back to Queue</a>
+    
+    <div class="container">
+        <header>
+            <h1>🔬 SmartPneu Processing Lab</h1>
+            <p>Reprocess images with different settings • Organized by day • Lazy loaded</p>
+        </header>
+        
+        <div class="main-layout">
+            <!-- Controls Panel -->
+            <div class="controls">
+                <div class="control-section">
+                    <h3>✨ Enhancement</h3>
+                    
+                    <div class="control-group">
+                        <label>Shadow Lift <span class="value" id="shadowLiftValue">20</span></label>
+                        <input type="range" id="shadowLift" min="0" max="50" value="20" step="1">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Brightness <span class="value" id="brightnessValue">1.10</span></label>
+                        <input type="range" id="brightness" min="0.5" max="2.0" value="1.10" step="0.05">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Contrast <span class="value" id="contrastValue">1.15</span></label>
+                        <input type="range" id="contrast" min="0.5" max="2.0" value="1.15" step="0.05">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Sharpness <span class="value" id="sharpnessValue">1.15</span></label>
+                        <input type="range" id="sharpness" min="0.5" max="2.0" value="1.15" step="0.05">
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <h3>🎭 Background Removal</h3>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="alphaMatting" checked>
+                        <label for="alphaMatting">Alpha matting (better edges)</label>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Edge Erode <span class="value" id="erodeSizeValue">12</span></label>
+                        <input type="range" id="erodeSize" min="0" max="30" value="12" step="1">
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <h3>📐 Crop & Output</h3>
+                    
+                    <div class="control-group">
+                        <label>Margin % <span class="value" id="marginValue">4</span></label>
+                        <input type="range" id="margin" min="0" max="20" value="4" step="1">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Output Size <span class="value" id="outputSizeValue">2048</span></label>
+                        <input type="range" id="outputSize" min="512" max="4096" value="2048" step="256">
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <h3>💾 Actions</h3>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="saveToCloud" checked>
+                        <label for="saveToCloud">Save to Cloudinary</label>
+                    </div>
+                    <button class="btn btn-secondary" id="resetBtn">↺ Reset Settings</button>
+                </div>
+                
+                <div class="control-section">
+                    <h3>📋 Export Settings</h3>
+                    <div class="settings-export">
+                        <pre id="settingsCode"></pre>
+                    </div>
+                    <button class="btn btn-secondary" id="copySettingsBtn" style="margin-top: 10px;">
+                        Copy to Clipboard
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Days Panel -->
+            <div class="days-panel">
+                <div class="days-header">
+                    <h2>📅 Images by Day</h2>
+                    <div class="stats">
+                        <span id="totalImages">Loading...</span>
+                        <span id="totalDays">-</span>
+                    </div>
+                </div>
+                
+                <div id="daysContainer">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading days...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Preview Modal -->
+    <div class="modal" id="previewModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Image Preview</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-compare">
+                    <div class="img-box">
+                        <img id="modalOriginal" src="">
+                        <h4>Original</h4>
+                    </div>
+                    <div class="img-box">
+                        <img id="modalProcessed" src="">
+                        <h4>Processed</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+    
+    <script>
+        // State
+        let days = [];
+        let loadedDays = {};
+        let processing = new Set();
+        
+        // Sliders
+        const sliders = {
+            shadowLift: { el: document.getElementById('shadowLift'), value: document.getElementById('shadowLiftValue') },
+            brightness: { el: document.getElementById('brightness'), value: document.getElementById('brightnessValue') },
+            contrast: { el: document.getElementById('contrast'), value: document.getElementById('contrastValue') },
+            sharpness: { el: document.getElementById('sharpness'), value: document.getElementById('sharpnessValue') },
+            erodeSize: { el: document.getElementById('erodeSize'), value: document.getElementById('erodeSizeValue') },
+            margin: { el: document.getElementById('margin'), value: document.getElementById('marginValue') },
+            outputSize: { el: document.getElementById('outputSize'), value: document.getElementById('outputSizeValue') },
+        };
+        
+        const checkboxes = {
+            alphaMatting: document.getElementById('alphaMatting'),
+            saveToCloud: document.getElementById('saveToCloud'),
+        };
+        
+        // Initialize sliders
+        Object.keys(sliders).forEach(key => {
+            sliders[key].el.addEventListener('input', (e) => {
+                sliders[key].value.textContent = e.target.value;
+                updateSettingsCode();
+            });
+        });
+        
+        Object.keys(checkboxes).forEach(key => {
+            checkboxes[key].addEventListener('change', updateSettingsCode);
+        });
+        
+        function getSettings() {
+            return {
+                shadow_lift: parseInt(sliders.shadowLift.el.value),
+                brightness: parseFloat(sliders.brightness.el.value),
+                contrast: parseFloat(sliders.contrast.el.value),
+                sharpness: parseFloat(sliders.sharpness.el.value),
+                alpha_matting: checkboxes.alphaMatting.checked,
+                erode_size: parseInt(sliders.erodeSize.el.value),
+                margin_percent: parseInt(sliders.margin.el.value),
+                output_size: parseInt(sliders.outputSize.el.value),
+                save_to_cloud: checkboxes.saveToCloud.checked,
+            };
+        }
+        
+        function updateSettingsCode() {
+            const s = getSettings();
+            document.getElementById('settingsCode').textContent = `# processing.py settings
+self.brightness_factor = ${s.brightness}
+self.contrast_factor = ${s.contrast}
+self.sharpness_factor = ${s.sharpness}
+self.shadow_lift = ${s.shadow_lift}
+
+# Background removal
+self.use_alpha_matting = ${s.alpha_matting ? 'True' : 'False'}
+self.erode_size = ${s.erode_size}
+
+# Crop
+self.margin_percent = ${s.margin_percent}
+self.output_size = ${s.output_size}`;
+        }
+        
+        // Load days
+        async function loadDays() {
+            try {
+                const response = await fetch('/api/lab/days');
+                const data = await response.json();
+                days = data.days;
+                
+                document.getElementById('totalImages').textContent = `${data.total_images} images`;
+                document.getElementById('totalDays').textContent = `${days.length} days`;
+                
+                renderDays();
+            } catch (error) {
+                showToast('Failed to load days: ' + error.message, 'error');
+            }
+        }
+        
+        function renderDays() {
+            const container = document.getElementById('daysContainer');
+            
+            if (days.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No images yet</h3>
+                        <p>Upload images through the main queue</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = days.map(day => `
+                <div class="day-section" data-date="${day.date}">
+                    <div class="day-header" onclick="toggleDay('${day.date}')">
+                        <h3>
+                            <span class="arrow">▶</span>
+                            ${formatDate(day.date)}
+                        </h3>
+                        <div class="day-meta">
+                            <span class="count">${day.count} images</span>
+                        </div>
+                    </div>
+                    <div class="day-content">
+                        <div class="day-actions">
+                            <button class="btn btn-primary btn-sm" onclick="reprocessDay('${day.date}')">
+                                ⚡ Reprocess All
+                            </button>
+                        </div>
+                        <div class="image-grid" id="grid-${day.date}">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                <p>Loading images...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        async function toggleDay(date) {
+            const section = document.querySelector(`.day-section[data-date="${date}"]`);
+            const isOpen = section.classList.contains('open');
+            
+            if (isOpen) {
+                section.classList.remove('open');
+            } else {
+                section.classList.add('open');
+                
+                if (!loadedDays[date]) {
+                    await loadDayImages(date);
+                }
+            }
+        }
+        
+        async function loadDayImages(date) {
+            try {
+                const response = await fetch(`/api/lab/images/day/${date}`);
+                const images = await response.json();
+                loadedDays[date] = images;
+                renderDayImages(date, images);
+            } catch (error) {
+                showToast('Failed to load images: ' + error.message, 'error');
+            }
+        }
+        
+        function renderDayImages(date, images) {
+            const grid = document.getElementById(`grid-${date}`);
+            
+            grid.innerHTML = images.map(img => `
+                <div class="image-card" id="card-${img.id}" data-id="${img.id}">
+                    <div class="image-compare">
+                        <div class="img-wrapper">
+                            <img src="${img.original_url}" alt="Original" loading="lazy">
+                            <span class="img-label">Original</span>
+                        </div>
+                        <div class="img-wrapper">
+                            ${img.processed_url 
+                                ? `<img src="${img.processed_url}" alt="Processed" loading="lazy">`
+                                : '<span class="placeholder">Not processed</span>'
+                            }
+                            <span class="img-label">Processed</span>
+                        </div>
+                    </div>
+                    <div class="image-info">
+                        <div class="filename" title="${img.original_filename}">${img.original_filename}</div>
+                        ${img.sku ? `<div class="sku">SKU: ${img.sku}</div>` : ''}
+                        <span class="status status-${img.status}">${img.status}</span>
+                        <div class="image-actions">
+                            <button class="btn btn-primary" onclick="reprocessImage(${img.id})">
+                                ⚡ Reprocess
+                            </button>
+                            <button class="btn btn-secondary" onclick="previewImage(${img.id})">
+                                👁 Preview
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        async function reprocessImage(id) {
+            if (processing.has(id)) return;
+            
+            const card = document.getElementById(`card-${id}`);
+            card.classList.add('processing');
+            processing.add(id);
+            
+            try {
+                const response = await fetch(`/api/lab/reprocess/${id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(getSettings())
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const processedWrapper = card.querySelectorAll('.img-wrapper')[1];
+                    processedWrapper.innerHTML = `
+                        <img src="${result.processed_url}?t=${Date.now()}" alt="Processed">
+                        <span class="img-label">Processed</span>
+                    `;
+                    
+                    showToast(`Processed in ${result.time.toFixed(1)}s`, 'success');
+                } else {
+                    showToast('Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+            
+            card.classList.remove('processing');
+            processing.delete(id);
+        }
+        
+        async function reprocessDay(date) {
+            const images = loadedDays[date];
+            if (!images || images.length === 0) {
+                showToast('Open the day first to load images', 'error');
+                return;
+            }
+            
+            if (!confirm(`Reprocess all ${images.length} images from ${formatDate(date)}?`)) {
+                return;
+            }
+            
+            showToast(`Processing ${images.length} images...`, 'success');
+            
+            for (const img of images) {
+                await reprocessImage(img.id);
+            }
+            
+            showToast(`Finished processing ${images.length} images`, 'success');
+        }
+        
+        function previewImage(id) {
+            let img = null;
+            for (const date in loadedDays) {
+                img = loadedDays[date].find(i => i.id === id);
+                if (img) break;
+            }
+            
+            if (!img) return;
+            
+            document.getElementById('modalTitle').textContent = img.sku || img.original_filename;
+            document.getElementById('modalOriginal').src = img.original_url;
+            document.getElementById('modalProcessed').src = img.processed_url || img.original_url;
+            document.getElementById('previewModal').classList.add('show');
+        }
+        
+        function closeModal() {
+            document.getElementById('previewModal').classList.remove('show');
+        }
+        
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            if (dateStr === today.toISOString().split('T')[0]) {
+                return '📅 Today';
+            } else if (dateStr === yesterday.toISOString().split('T')[0]) {
+                return '📅 Yesterday';
+            }
+            
+            return date.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        }
+        
+        function showToast(message, type = '') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show ' + type;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+        
+        // Reset
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            sliders.shadowLift.el.value = 20;
+            sliders.brightness.el.value = 1.10;
+            sliders.contrast.el.value = 1.15;
+            sliders.sharpness.el.value = 1.15;
+            sliders.erodeSize.el.value = 12;
+            sliders.margin.el.value = 4;
+            sliders.outputSize.el.value = 2048;
+            
+            Object.keys(sliders).forEach(key => {
+                sliders[key].value.textContent = sliders[key].el.value;
+            });
+            
+            checkboxes.alphaMatting.checked = true;
+            checkboxes.saveToCloud.checked = true;
+            
+            updateSettingsCode();
+        });
+        
+        // Copy
+        document.getElementById('copySettingsBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(document.getElementById('settingsCode').textContent);
+            showToast('Settings copied!', 'success');
+        });
+        
+        // Modal close
+        document.getElementById('previewModal').addEventListener('click', (e) => {
+            if (e.target.id === 'previewModal') closeModal();
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+        
+        // Init
+        updateSettingsCode();
+        loadDays();
+    </script>
+</body>
+</html>

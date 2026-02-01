@@ -340,10 +340,109 @@ def index():
     return render_template('queue.html')
 
 
+@app.route('/lab')
+def lab():
+    """Processing Lab UI - reprocess images with different settings."""
+    return render_template('lab.html')
+
+
 @app.route('/health')
 def health():
     """Health check endpoint for Railway."""
     return jsonify({'status': 'ok'})
+
+
+# =============================================================================
+# Processing Lab API
+# =============================================================================
+
+@app.route('/api/lab/days')
+def get_lab_days():
+    """Get list of days with image counts for the lab."""
+    from sqlalchemy import func
+    
+    results = db.session.query(
+        func.date(Image.created_at).label('date'),
+        func.count(Image.id).label('count')
+    ).group_by(
+        func.date(Image.created_at)
+    ).order_by(
+        func.date(Image.created_at).desc()
+    ).all()
+    
+    total_images = db.session.query(func.count(Image.id)).scalar() or 0
+    
+    days = [{'date': str(r.date), 'count': r.count} for r in results]
+    
+    return jsonify({
+        'days': days,
+        'total_images': total_images
+    })
+
+
+@app.route('/api/lab/images/day/<date>')
+def get_lab_images_by_day(date):
+    """Get all images for a specific day (lazy loading for the lab)."""
+    from sqlalchemy import func
+    
+    images = Image.query.filter(
+        func.date(Image.created_at) == date
+    ).order_by(
+        Image.created_at.asc()
+    ).all()
+    
+    return jsonify([img.to_dict() for img in images])
+
+
+@app.route('/api/lab/reprocess/<int:image_id>', methods=['POST'])
+def reprocess_image(image_id):
+    """Reprocess a single image with custom settings from the lab."""
+    import time
+    import requests as http_requests
+    
+    start_time = time.time()
+    
+    image = Image.query.get_or_404(image_id)
+    settings = request.get_json() or {}
+    
+    try:
+        # Download original image
+        response = http_requests.get(image.original_url)
+        response.raise_for_status()
+        original_data = response.content
+        
+        # Process with custom settings
+        processor = ImageProcessor(output_size=settings.get('output_size', Config.OUTPUT_IMAGE_SIZE))
+        processed_data = processor.process_with_settings(original_data, settings)
+        
+        # Upload to Cloudinary if enabled
+        if settings.get('save_to_cloud', True):
+            storage = get_storage()
+            processed_url = storage.upload_processed_image(processed_data, image.original_filename)
+            
+            # Update database
+            image.processed_url = processed_url
+            image.processed_at = datetime.utcnow()
+            if image.status == 'pending':
+                image.status = 'processed'
+            db.session.commit()
+        else:
+            # Return base64 for preview only
+            import base64
+            processed_url = 'data:image/jpeg;base64,' + base64.b64encode(processed_data).decode('utf-8')
+        
+        elapsed = time.time() - start_time
+        
+        return jsonify({
+            'success': True,
+            'processed_url': processed_url,
+            'time': elapsed
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
 
 
 if __name__ == '__main__':
