@@ -17,8 +17,11 @@ class Config:
     CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY')
     CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET')
     
-    # remove.bg API
+    # remove.bg API (legacy)
     REMOVEBG_API_KEY = os.environ.get('REMOVEBG_API_KEY')
+    
+    # Poof API (removebgapi.com) - recommended
+    POOF_API_KEY = os.environ.get('POOF_API_KEY')
     
     # Shopify
     SHOPIFY_STORE_URL = os.environ.get('SHOPIFY_STORE_URL')

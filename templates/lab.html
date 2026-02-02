@@ -482,18 +482,18 @@
                     </div>
                     
                     <div class="control-group">
-                        <label>Brightness <span class="value" id="brightnessValue">1.10</span></label>
-                        <input type="range" id="brightness" min="0.5" max="2.0" value="1.10" step="0.05">
+                        <label>Brightness <span class="value" id="brightnessValue">1.15</span></label>
+                        <input type="range" id="brightness" min="0.5" max="2.0" value="1.15" step="0.05">
                     </div>
                     
                     <div class="control-group">
-                        <label>Contrast <span class="value" id="contrastValue">1.15</span></label>
-                        <input type="range" id="contrast" min="0.5" max="2.0" value="1.15" step="0.05">
+                        <label>Contrast <span class="value" id="contrastValue">1.20</span></label>
+                        <input type="range" id="contrast" min="0.5" max="2.0" value="1.20" step="0.05">
                     </div>
                     
                     <div class="control-group">
-                        <label>Sharpness <span class="value" id="sharpnessValue">1.15</span></label>
-                        <input type="range" id="sharpness" min="0.5" max="2.0" value="1.15" step="0.05">
+                        <label>Sharpness <span class="value" id="sharpnessValue">1.10</span></label>
+                        <input type="range" id="sharpness" min="0.5" max="2.0" value="1.10" step="0.05">
                     </div>
                 </div>
                 
@@ -504,14 +504,33 @@
                         <input type="checkbox" id="removeBg" checked>
                         <label for="removeBg">Remove background</label>
                     </div>
+                    
+                    <div class="control-group" style="margin-top: 10px;">
+                        <label>Method</label>
+                        <select id="bgMethod" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #333;">
+                            <option value="auto">Auto (Poof → rembg)</option>
+                            <option value="poof">Poof API (best quality)</option>
+                            <option value="rembg" selected>rembg (free, local)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="checkbox-group" style="margin-top: 10px;">
+                        <input type="checkbox" id="alphaMatting" checked>
+                        <label for="alphaMatting">Alpha matting (better edges)</label>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Erode Size <span class="value" id="erodeSizeValue">10</span></label>
+                        <input type="range" id="erodeSize" min="0" max="30" value="10" step="1">
+                    </div>
                 </div>
                 
                 <div class="control-section">
                     <h3>📐 Output</h3>
                     
                     <div class="control-group">
-                        <label>Margin % <span class="value" id="marginValue">4</span></label>
-                        <input type="range" id="margin" min="0" max="20" value="4" step="1">
+                        <label>Margin % <span class="value" id="marginValue">5</span></label>
+                        <input type="range" id="margin" min="0" max="20" value="5" step="1">
                     </div>
                     
                     <div class="control-group">
@@ -577,14 +596,18 @@
             brightness: { el: document.getElementById('brightness'), value: document.getElementById('brightnessValue') },
             contrast: { el: document.getElementById('contrast'), value: document.getElementById('contrastValue') },
             sharpness: { el: document.getElementById('sharpness'), value: document.getElementById('sharpnessValue') },
+            erodeSize: { el: document.getElementById('erodeSize'), value: document.getElementById('erodeSizeValue') },
             margin: { el: document.getElementById('margin'), value: document.getElementById('marginValue') },
             outputSize: { el: document.getElementById('outputSize'), value: document.getElementById('outputSizeValue') },
         };
         
         const checkboxes = {
             removeBg: document.getElementById('removeBg'),
+            alphaMatting: document.getElementById('alphaMatting'),
             saveToCloud: document.getElementById('saveToCloud'),
         };
+        
+        const bgMethodSelect = document.getElementById('bgMethod');
         
         // Initialize sliders
         Object.keys(sliders).forEach(key => {
@@ -598,6 +621,8 @@
             checkboxes[key].addEventListener('change', updateSettingsCode);
         });
         
+        bgMethodSelect.addEventListener('change', updateSettingsCode);
+        
         function getSettings() {
             return {
                 shadow_lift: parseInt(sliders.shadowLift.el.value),
@@ -605,6 +630,9 @@
                 contrast: parseFloat(sliders.contrast.el.value),
                 sharpness: parseFloat(sliders.sharpness.el.value),
                 remove_bg: checkboxes.removeBg.checked,
+                bg_method: bgMethodSelect.value,
+                alpha_matting: checkboxes.alphaMatting.checked,
+                erode_size: parseInt(sliders.erodeSize.el.value),
                 margin_percent: parseInt(sliders.margin.el.value),
                 output_size: parseInt(sliders.outputSize.el.value),
                 save_to_cloud: checkboxes.saveToCloud.checked,
@@ -619,7 +647,12 @@ self.contrast_factor = ${s.contrast}
 self.sharpness_factor = ${s.sharpness}
 self.shadow_lift = ${s.shadow_lift}
 self.margin_percent = ${s.margin_percent}
-self.output_size = ${s.output_size}`;
+self.output_size = ${s.output_size}
+
+# Background removal
+alpha_matting = ${s.alpha_matting}
+erode_size = ${s.erode_size}
+bg_method = "${s.bg_method}"`;
         }
         
         // Load days
@@ -850,11 +883,13 @@ self.output_size = ${s.output_size}`;
         
         // Reset
         document.getElementById('resetBtn').addEventListener('click', () => {
+            // Lab2 defaults
             sliders.shadowLift.el.value = 20;
-            sliders.brightness.el.value = 1.10;
-            sliders.contrast.el.value = 1.15;
-            sliders.sharpness.el.value = 1.15;
-            sliders.margin.el.value = 4;
+            sliders.brightness.el.value = 1.15;
+            sliders.contrast.el.value = 1.20;
+            sliders.sharpness.el.value = 1.10;
+            sliders.erodeSize.el.value = 10;
+            sliders.margin.el.value = 5;
             sliders.outputSize.el.value = 2048;
             
             Object.keys(sliders).forEach(key => {
@@ -862,7 +897,9 @@ self.output_size = ${s.output_size}`;
             });
             
             checkboxes.removeBg.checked = true;
+            checkboxes.alphaMatting.checked = true;
             checkboxes.saveToCloud.checked = true;
+            bgMethodSelect.value = 'rembg';
             
             updateSettingsCode();
         });

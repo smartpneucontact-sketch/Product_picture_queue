@@ -9,3 +9,5 @@ python-dotenv==1.0.0
 numpy<2
 opencv-python-headless==4.9.0.80
 rembg==2.0.50
+pymatting==1.1.12
+scipy==1.11.4

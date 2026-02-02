@@ -2,6 +2,10 @@ import requests
 from PIL import Image, ImageEnhance
 from io import BytesIO
 import numpy as np
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Lazy load rembg (downloads model on first use)
 _rembg_remove = None
@@ -15,17 +19,96 @@ def get_rembg():
 
 
 class ImageProcessor:
-    def __init__(self, removebg_api_key=None, output_size=2048):
+    def __init__(self, poof_api_key=None, output_size=2048):
         self.output_size = output_size
+        self.poof_api_key = poof_api_key or os.environ.get('POOF_API_KEY')
         
-        # Enhancement settings
-        self.brightness_factor = 1.10
-        self.contrast_factor = 1.15
-        self.sharpness_factor = 1.15
+        # Enhancement settings (matching Lab2)
+        self.brightness_factor = 1.15
+        self.contrast_factor = 1.20
+        self.sharpness_factor = 1.10
         self.shadow_lift = 20
         
         # Crop settings
-        self.margin_percent = 4
+        self.margin_percent = 5
+        
+        # Alpha matting settings for rembg
+        self.alpha_matting = True
+        self.erode_size = 10
+        self.fg_threshold = 240
+        self.bg_threshold = 10
+        
+        # Background removal method: 'poof', 'rembg', or 'auto'
+        self.bg_removal_method = 'poof' if self.poof_api_key else 'rembg'
+    
+    def remove_background_poof(self, image_data):
+        """
+        Remove background using Poof API (removebgapi.com).
+        Returns PNG bytes with transparent background.
+        """
+        if not self.poof_api_key:
+            raise ValueError("Poof API key not configured")
+        
+        logger.info("Removing background using Poof API...")
+        
+        # Poof API endpoint
+        url = "https://api.poof.bg/v1/remove-background"
+        
+        headers = {
+            "X-Api-Key": self.poof_api_key
+        }
+        
+        files = {
+            'image_file': ('image.jpg', image_data, 'image/jpeg')
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, files=files, timeout=60)
+            
+            if response.status_code == 200:
+                logger.info(f"Poof API success - received {len(response.content)} bytes")
+                return response.content
+            else:
+                logger.error(f"Poof API error: {response.status_code} - {response.text[:200]}")
+                raise Exception(f"Poof API error: {response.status_code}")
+                
+        except requests.exceptions.Timeout:
+            logger.error("Poof API timeout")
+            raise Exception("Poof API timeout - try again later")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Poof API request error: {e}")
+            raise Exception(f"Poof API error: {e}")
+    
+    def remove_background_rembg(self, image_data):
+        """
+        Remove background using rembg (local, free) with alpha matting.
+        Returns PNG bytes with transparent background.
+        """
+        logger.info("Removing background using rembg with alpha_matting...")
+        input_image = Image.open(BytesIO(image_data))
+        
+        remove = get_rembg()
+        
+        # Use alpha matting for better edge quality (like Lab2)
+        if self.alpha_matting:
+            from rembg import new_session
+            session = new_session("u2net")
+            output_image = remove(
+                input_image,
+                session=session,
+                alpha_matting=True,
+                alpha_matting_foreground_threshold=self.fg_threshold,
+                alpha_matting_background_threshold=self.bg_threshold,
+                alpha_matting_erode_size=self.erode_size,
+            )
+        else:
+            output_image = remove(input_image)
+        
+        output_buffer = BytesIO()
+        output_image.save(output_buffer, format='PNG')
+        output_buffer.seek(0)
+        
+        return output_buffer.getvalue()
     
     def enhance_image(self, img):
         """
@@ -77,21 +160,32 @@ class ImageProcessor:
         
         return enhanced
     
-    def remove_background(self, image_data):
+    def remove_background(self, image_data, method=None):
         """
-        Remove background using rembg.
+        Remove background using configured method.
+        Methods: 'poof', 'rembg', or 'auto' (try poof first, fallback to rembg)
         Returns PNG bytes with transparent background.
         """
-        input_image = Image.open(BytesIO(image_data))
+        method = method or self.bg_removal_method
         
-        remove = get_rembg()
-        output_image = remove(input_image)
-        
-        output_buffer = BytesIO()
-        output_image.save(output_buffer, format='PNG')
-        output_buffer.seek(0)
-        
-        return output_buffer.getvalue()
+        if method == 'poof':
+            try:
+                return self.remove_background_poof(image_data)
+            except Exception as e:
+                logger.warning(f"Poof failed, falling back to rembg: {e}")
+                return self.remove_background_rembg(image_data)
+        elif method == 'rembg':
+            return self.remove_background_rembg(image_data)
+        elif method == 'auto':
+            # Try Poof first if API key is available
+            if self.poof_api_key:
+                try:
+                    return self.remove_background_poof(image_data)
+                except Exception as e:
+                    logger.warning(f"Poof failed, falling back to rembg: {e}")
+            return self.remove_background_rembg(image_data)
+        else:
+            raise ValueError(f"Unknown background removal method: {method}")
     
     def crop_to_square(self, image_data):
         """
@@ -134,10 +228,10 @@ class ImageProcessor:
         
         return square_img
     
-    def process(self, image_data):
+    def process(self, image_data, bg_method=None):
         """Full processing pipeline."""
         # Step 1: Remove background
-        no_bg_image = self.remove_background(image_data)
+        no_bg_image = self.remove_background(image_data, method=bg_method)
         
         # Step 2: Crop to square
         square_img = self.crop_to_square(no_bg_image)
@@ -154,19 +248,26 @@ class ImageProcessor:
     
     def process_with_settings(self, image_data, settings):
         """Process with custom settings (used by the lab)."""
-        # Apply settings
-        self.brightness_factor = settings.get('brightness', 1.10)
-        self.contrast_factor = settings.get('contrast', 1.15)
-        self.sharpness_factor = settings.get('sharpness', 1.15)
+        # Apply enhancement settings
+        self.brightness_factor = settings.get('brightness', 1.15)
+        self.contrast_factor = settings.get('contrast', 1.20)
+        self.sharpness_factor = settings.get('sharpness', 1.10)
         self.shadow_lift = settings.get('shadow_lift', 20)
-        self.margin_percent = settings.get('margin_percent', 4)
+        self.margin_percent = settings.get('margin_percent', 5)
         self.output_size = settings.get('output_size', 2048)
         
+        # Alpha matting settings
+        self.alpha_matting = settings.get('alpha_matting', True)
+        self.erode_size = settings.get('erode_size', 10)
+        self.fg_threshold = settings.get('fg_threshold', 240)
+        self.bg_threshold = settings.get('bg_threshold', 10)
+        
         remove_bg = settings.get('remove_bg', True)
+        bg_method = settings.get('bg_method', 'auto')  # 'poof', 'rembg', or 'auto'
         
         # Step 1: Background removal (optional)
         if remove_bg:
-            no_bg_data = self.remove_background(image_data)
+            no_bg_data = self.remove_background(image_data, method=bg_method)
             img = Image.open(BytesIO(no_bg_data))
         else:
             img = Image.open(BytesIO(image_data))

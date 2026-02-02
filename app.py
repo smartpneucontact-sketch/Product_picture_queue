@@ -32,8 +32,8 @@ def get_processor():
     global _processor
     if _processor is None:
         _processor = ImageProcessor(
-            Config.REMOVEBG_API_KEY,
-            Config.OUTPUT_IMAGE_SIZE
+            poof_api_key=Config.POOF_API_KEY,
+            output_size=Config.OUTPUT_IMAGE_SIZE
         )
     return _processor
 
@@ -407,7 +407,10 @@ def reprocess_image(image_id):
         original_data = response.content
         
         # Process with custom settings
-        processor = ImageProcessor(output_size=settings.get('output_size', Config.OUTPUT_IMAGE_SIZE))
+        processor = ImageProcessor(
+            poof_api_key=Config.POOF_API_KEY,
+            output_size=settings.get('output_size', Config.OUTPUT_IMAGE_SIZE)
+        )
         processed_data = processor.process_with_settings(original_data, settings)
         
         # Upload to Cloudinary if enabled
