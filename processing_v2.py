@@ -436,6 +436,8 @@ class ImageProcessorV2:
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
         
+        logger.info(f"crop_to_square: input size {img.size}, mode {img.mode}")
+        
         # Apply edge refinement if enabled
         if self.edge_refinement:
             img = self.refine_edges(img)
@@ -444,20 +446,30 @@ class ImageProcessorV2:
         if bbox is None:
             raise Exception("No content found in image")
         
+        logger.info(f"crop_to_square: bounding box {bbox}")
+        
         img_cropped = img.crop(bbox)
         width, height = img_cropped.size
+        
+        logger.info(f"crop_to_square: cropped content size {width}x{height}")
         
         max_dim = max(width, height)
         margin = int(max_dim * (self.margin_percent / 100))
         square_size = max_dim + (margin * 2)
         
+        logger.info(f"crop_to_square: square_size={square_size}, margin={margin}px")
+        
         square_img = Image.new('RGBA', (square_size, square_size), (255, 255, 255, 0))
         x_offset = (square_size - width) // 2
         y_offset = (square_size - height) // 2
+        
+        logger.info(f"crop_to_square: centering offsets x={x_offset}, y={y_offset}")
+        
         square_img.paste(img_cropped, (x_offset, y_offset), img_cropped)
         
         if square_size > self.output_size:
             square_img = square_img.resize((self.output_size, self.output_size), Image.Resampling.LANCZOS)
+            logger.info(f"crop_to_square: resized to {self.output_size}x{self.output_size}")
         
         return square_img
     
