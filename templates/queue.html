@@ -365,9 +365,8 @@
             background: #252540;
             border: 2px dashed #444;
             border-radius: 12px;
-            padding: 30px;
+            padding: 20px;
             text-align: center;
-            margin-bottom: 20px;
             cursor: pointer;
             transition: all 0.2s;
         }
@@ -384,8 +383,33 @@
         
         .upload-area input { display: none; }
         
-        .upload-area h3 { margin-bottom: 10px; }
-        .upload-area p { color: #888; font-size: 14px; }
+        .upload-area h3 { margin-bottom: 5px; font-size: 16px; }
+        .upload-area p { color: #888; font-size: 13px; margin: 0; }
+        
+        /* Sticky Controls */
+        .sticky-controls {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: #1a1a2e;
+            padding: 15px 0;
+            margin: 0 -20px;
+            padding-left: 20px;
+            padding-right: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .sticky-controls .upload-area {
+            margin-bottom: 15px;
+        }
+        
+        .sticky-controls .actions-bar {
+            margin-bottom: 15px;
+        }
+        
+        .sticky-controls .tabs {
+            margin-bottom: 0;
+        }
         
         /* Loading */
         .loading {
@@ -487,34 +511,37 @@
             </div>
         </header>
         
-        <!-- Upload Area -->
-        <div class="upload-area" id="uploadArea">
-            <input type="file" id="fileInput" accept="image/*" multiple>
-            <h3>📁 Drop images here or click to upload</h3>
-            <p>Supports JPG, PNG, WEBP</p>
-        </div>
-        
-        <!-- Actions Bar -->
-        <div class="actions-bar">
-            <div class="sku-input">
-                <input type="text" id="skuInput" placeholder="Enter SKU...">
-                <button class="btn btn-primary" id="assignBtn" disabled>Assign & Process</button>
-                <button class="btn btn-secondary" id="draftBtn" disabled>Save Draft</button>
+        <!-- Sticky Controls -->
+        <div class="sticky-controls">
+            <!-- Upload Area -->
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="fileInput" accept="image/*" multiple>
+                <h3>📁 Drop images here or click to upload</h3>
+                <p>Supports JPG, PNG, WEBP</p>
             </div>
-            <button class="btn btn-secondary" id="processOnlyBtn" disabled>Process Only</button>
-            <button class="btn btn-secondary" id="processDraftsBtn" disabled>Process Drafts</button>
-            <button class="btn btn-danger" id="deleteBtn" disabled>Delete Selected</button>
-            <span class="selection-info" id="selectionInfo">0 selected</span>
-        </div>
-        
-        <!-- Filter Tabs -->
-        <div class="tabs">
-            <button class="tab active" data-status="">All</button>
-            <button class="tab" data-status="pending">Pending</button>
-            <button class="tab" data-status="draft">Draft</button>
-            <button class="tab" data-status="processing">Processing</button>
-            <button class="tab" data-status="completed">Completed</button>
-            <button class="tab" data-status="failed">Failed</button>
+            
+            <!-- Actions Bar -->
+            <div class="actions-bar">
+                <div class="sku-input">
+                    <input type="text" id="skuInput" placeholder="Enter SKU...">
+                    <button class="btn btn-primary" id="assignBtn" disabled>Assign & Process</button>
+                    <button class="btn btn-secondary" id="draftBtn" disabled>Save Draft</button>
+                </div>
+                <button class="btn btn-secondary" id="processOnlyBtn" disabled>Process Only</button>
+                <button class="btn btn-secondary" id="processDraftsBtn" disabled>Process Drafts</button>
+                <button class="btn btn-danger" id="deleteBtn" disabled>Delete Selected</button>
+                <span class="selection-info" id="selectionInfo">0 selected</span>
+            </div>
+            
+            <!-- Filter Tabs -->
+            <div class="tabs">
+                <button class="tab active" data-status="">All</button>
+                <button class="tab" data-status="pending">Pending</button>
+                <button class="tab" data-status="draft">Draft</button>
+                <button class="tab" data-status="processing">Processing</button>
+                <button class="tab" data-status="completed">Completed</button>
+                <button class="tab" data-status="failed">Failed</button>
+            </div>
         </div>
         
         <!-- Days Container -->

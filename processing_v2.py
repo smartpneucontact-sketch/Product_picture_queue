@@ -49,7 +49,7 @@ class ImageProcessorV2:
         # Label protection (bright text areas)
         self.label_threshold = 200       # Brightness threshold for label detection
         self.label_edge_threshold = 50   # Edge density threshold for text areas
-        self.label_protection = 0.85     # How much to protect labels (0-1)
+        self.label_protection = 1.0      # Full protection - preserve labels exactly as original
         
         # Global adjustments (applied to whole image)
         self.sharpness_factor = 1.15     # Overall sharpening
@@ -228,42 +228,148 @@ class ImageProcessorV2:
     
     # ==================== LABEL DETECTION ====================
     
-    def detect_label_regions(self, img_array):
+    def detect_label_regions(self, img_array, alpha_mask=None):
         """
-        Detect label/text regions using brightness + edge density analysis.
+        Detect label/text regions on tire.
+        Labels are typically white/light rectangles with dark text on the tire.
+        
+        Args:
+            img_array: RGB image array
+            alpha_mask: Optional alpha channel to identify tire vs background
+            
         Returns a mask where 1.0 = label area (protect), 0.0 = tire area (enhance).
         """
-        # Convert to grayscale if needed
         if len(img_array.shape) == 3:
             gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
         else:
             gray = img_array
         
-        # 1. Brightness-based detection (white/light areas)
-        brightness_mask = gray.astype(np.float32) / 255.0
-        bright_areas = np.clip((brightness_mask - (self.label_threshold/255)) * 4, 0, 1)
+        h, w = gray.shape
+        label_mask = np.zeros((h, w), dtype=np.float32)
         
-        # 2. Edge density detection (text has high edge density)
-        edges = cv2.Canny(gray, 50, 150)
-        # Dilate edges to connect text characters
+        # If we have alpha mask, only look for labels ON the tire (not background)
+        if alpha_mask is not None:
+            tire_region = alpha_mask > 128
+        else:
+            # Assume non-white areas are tire
+            tire_region = gray < 240
+        
+        # 1. Find bright regions within the tire (potential labels)
+        # Labels are typically much brighter than tire rubber (dark gray/black)
+        brightness = gray.astype(np.float32)
+        
+        # Calculate tire average brightness (excluding very bright areas)
+        tire_pixels = brightness[tire_region & (brightness < 200)]
+        if len(tire_pixels) > 0:
+            tire_avg = np.mean(tire_pixels)
+            tire_std = np.std(tire_pixels)
+        else:
+            tire_avg = 50
+            tire_std = 30
+        
+        # Labels are significantly brighter than tire average
+        label_brightness_threshold = min(tire_avg + 3 * tire_std, self.label_threshold)
+        
+        # Create mask of bright-on-tire regions
+        bright_on_tire = (brightness > label_brightness_threshold) & tire_region
+        bright_mask = bright_on_tire.astype(np.uint8) * 255
+        
+        # Morphological cleanup
         kernel = np.ones((5, 5), np.uint8)
-        edges_dilated = cv2.dilate(edges, kernel, iterations=2)
-        # Blur to create density map
-        edge_density = cv2.GaussianBlur(edges_dilated.astype(np.float32), (21, 21), 0)
-        edge_density = edge_density / 255.0
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, kernel, iterations=1)
         
-        # 3. Combine: areas that are BOTH bright AND have text-like edges
-        # Or areas that are very bright (pure white labels)
-        label_mask = np.maximum(
-            bright_areas * 0.7 + edge_density * 0.3,  # Weighted combination
-            np.where(brightness_mask > 0.9, 1.0, 0.0)  # Pure white always protected
-        )
+        # 2. Find contours of bright regions
+        contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
-        # 4. Smooth the mask edges
-        label_mask = cv2.GaussianBlur(label_mask.astype(np.float32), (15, 15), 0)
-        label_mask = np.clip(label_mask, 0, 1)
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            
+            # Filter by size - labels are typically 1-15% of tire area
+            tire_area = np.sum(tire_region)
+            min_area = tire_area * 0.002  # Min 0.2% of tire
+            max_area = tire_area * 0.2    # Max 20% of tire
+            
+            if area < min_area or area > max_area:
+                continue
+            
+            x, y, cw, ch = cv2.boundingRect(contour)
+            
+            # Check aspect ratio - labels are usually rectangular
+            aspect = max(cw, ch) / (min(cw, ch) + 1)
+            if aspect > 8:  # Too elongated
+                continue
+            
+            # Check if region has text-like contrast (dark on light)
+            roi = gray[y:y+ch, x:x+cw]
+            roi_std = np.std(roi)
+            
+            # Labels have high local contrast (text)
+            if roi_std > 20:  # Has dark text on light background
+                # Mark this region as label
+                pad = 15
+                x1, y1 = max(0, x - pad), max(0, y - pad)
+                x2, y2 = min(w, x + cw + pad), min(h, y + ch + pad)
+                label_mask[y1:y2, x1:x2] = 1.0
+                logger.debug(f"Label detected: ({x},{y}) {cw}x{ch}, std={roi_std:.1f}")
+        
+        # 3. Also protect pure white areas on the tire (may be label edges)
+        pure_white_on_tire = (brightness > 230) & tire_region
+        label_mask = np.maximum(label_mask, pure_white_on_tire.astype(np.float32))
+        
+        # 4. Smooth the mask edges for blending
+        if np.any(label_mask > 0):
+            label_mask = cv2.GaussianBlur(label_mask, (15, 15), 0)
+            label_mask = np.clip(label_mask, 0, 1)
+        
+        coverage = np.mean(label_mask) * 100
+        logger.info(f"Label detection: {coverage:.1f}% of image protected")
         
         return label_mask
+    
+    def detect_label_bbox(self, img_array):
+        """
+        Detect the main label bounding box for more precise protection.
+        Returns (x, y, w, h) or None if no label found.
+        """
+        if len(img_array.shape) == 3:
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img_array
+        
+        # Threshold to find white regions
+        _, thresh = cv2.threshold(gray, self.label_threshold, 255, cv2.THRESH_BINARY)
+        
+        # Find contours
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        best_label = None
+        best_score = 0
+        
+        h, w = gray.shape
+        
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < 2000 or area > (h * w * 0.25):
+                continue
+            
+            x, y, cw, ch = cv2.boundingRect(contour)
+            
+            # Score based on rectangularity and size
+            rect_area = cw * ch
+            rectangularity = area / (rect_area + 1)
+            
+            # Check for text content
+            roi = gray[y:y+ch, x:x+cw]
+            std_dev = np.std(roi)  # High std = has dark text on white
+            
+            score = rectangularity * std_dev * (area / 10000)
+            
+            if score > best_score:
+                best_score = score
+                best_label = (x, y, cw, ch)
+        
+        return best_label
     
     # ==================== ENHANCEMENT ====================
     
@@ -343,8 +449,8 @@ class ImageProcessorV2:
         3. Lift shadows
         4. Color correction
         5. Denoise
-        6. Sharpen
-        7. Blend: enhanced tire + protected labels
+        6. Sharpen (only tire, not label)
+        7. Blend: enhanced tire + fully protected labels
         """
         has_alpha = img.mode == 'RGBA'
         
@@ -359,59 +465,75 @@ class ImageProcessorV2:
         
         original_array = np.array(rgb_img, dtype=np.uint8)
         
-        # Step 1: Detect label regions
-        label_mask = self.detect_label_regions(original_array)
+        # Step 1: Detect label regions (pass alpha for better detection)
+        label_mask = self.detect_label_regions(original_array, alpha_array)
         tire_mask = 1.0 - label_mask
-        
-        logger.debug(f"Label coverage: {np.mean(label_mask)*100:.1f}%")
         
         # Step 2: Create enhanced version for tire areas
         enhanced = original_array.copy()
         
-        # 2a. CLAHE for local contrast
+        # 2a. CLAHE for local contrast (only on tire)
         if self.tire_clahe_clip > 0:
-            enhanced = self.apply_clahe(enhanced, self.tire_clahe_clip, self.tire_clahe_grid)
+            clahe_result = self.apply_clahe(enhanced, self.tire_clahe_clip, self.tire_clahe_grid)
+            # Apply CLAHE only to tire areas
+            tire_mask_3ch = np.dstack([tire_mask, tire_mask, tire_mask])
+            enhanced = (clahe_result.astype(np.float32) * tire_mask_3ch + 
+                       enhanced.astype(np.float32) * (1 - tire_mask_3ch))
+            enhanced = enhanced.astype(np.uint8)
         
-        # 2b. Shadow lifting
+        # 2b. Shadow lifting (only on tire - dark areas)
         if self.shadow_lift > 0:
-            enhanced = self.lift_shadows(enhanced, self.shadow_lift)
+            shadow_result = self.lift_shadows(enhanced, self.shadow_lift)
+            tire_mask_3ch = np.dstack([tire_mask, tire_mask, tire_mask])
+            enhanced = (shadow_result.astype(np.float32) * tire_mask_3ch + 
+                       enhanced.astype(np.float32) * (1 - tire_mask_3ch))
+            enhanced = enhanced.astype(np.uint8)
         
-        # 2c. Color correction
+        # 2c. Color correction (apply to whole image - subtle)
         if self.color_correction:
             enhanced = self.auto_white_balance(enhanced)
         
-        # 2d. Denoise
+        # 2d. Denoise (whole image)
         if self.denoise_strength > 0:
             enhanced = self.denoise(enhanced, self.denoise_strength)
         
-        # 2e. Brightness/contrast adjustment
+        # 2e. Brightness/contrast adjustment (only on tire)
         if self.tire_brightness != 1.0 or self.tire_contrast != 1.0:
             enhanced_pil = Image.fromarray(enhanced)
+            adjusted = enhanced_pil.copy()
             if self.tire_brightness != 1.0:
-                enhanced_pil = ImageEnhance.Brightness(enhanced_pil).enhance(self.tire_brightness)
+                adjusted = ImageEnhance.Brightness(adjusted).enhance(self.tire_brightness)
             if self.tire_contrast != 1.0:
-                enhanced_pil = ImageEnhance.Contrast(enhanced_pil).enhance(self.tire_contrast)
-            enhanced = np.array(enhanced_pil)
+                adjusted = ImageEnhance.Contrast(adjusted).enhance(self.tire_contrast)
+            adjusted_array = np.array(adjusted)
+            
+            # Blend - only apply adjustments to tire
+            tire_mask_3ch = np.dstack([tire_mask, tire_mask, tire_mask])
+            enhanced = (adjusted_array.astype(np.float32) * tire_mask_3ch + 
+                       enhanced.astype(np.float32) * (1 - tire_mask_3ch))
+            enhanced = enhanced.astype(np.uint8)
         
-        # Step 3: Blend enhanced tire with protected labels
-        # Expand masks to 3 channels
-        tire_mask_3ch = np.dstack([tire_mask, tire_mask, tire_mask])
+        # Step 3: Final blend - use original for label areas with protection level
         label_mask_3ch = np.dstack([label_mask, label_mask, label_mask])
-        
-        # Weighted blend
         protection = self.label_protection
+        
+        # Full protection means 100% original in label areas
         blended = (
-            enhanced.astype(np.float32) * tire_mask_3ch +  # Full enhancement on tire
-            enhanced.astype(np.float32) * label_mask_3ch * (1 - protection) +  # Partial on labels
-            original_array.astype(np.float32) * label_mask_3ch * protection  # Protected original
+            enhanced.astype(np.float32) * (1 - label_mask_3ch * protection) +
+            original_array.astype(np.float32) * label_mask_3ch * protection
         )
         blended = np.clip(blended, 0, 255).astype(np.uint8)
         
-        # Step 4: Global sharpening
+        # Step 4: Sharpening - apply only to tire, not label
         if self.sharpness_factor != 1.0:
-            final_pil = Image.fromarray(blended)
-            final_pil = ImageEnhance.Sharpness(final_pil).enhance(self.sharpness_factor)
-            blended = np.array(final_pil)
+            sharpened_pil = Image.fromarray(blended)
+            sharpened_pil = ImageEnhance.Sharpness(sharpened_pil).enhance(self.sharpness_factor)
+            sharpened_array = np.array(sharpened_pil)
+            
+            # Blend sharpening - don't sharpen labels
+            blended = (sharpened_array.astype(np.float32) * (1 - label_mask_3ch) + 
+                      blended.astype(np.float32) * label_mask_3ch)
+            blended = blended.astype(np.uint8)
         
         final = Image.fromarray(blended)
         

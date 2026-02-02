@@ -523,8 +523,8 @@
                     </div>
                     
                     <div class="control-group">
-                        <label>Protection <span class="value" id="labelProtectionValue">0.85</span></label>
-                        <input type="range" id="labelProtection" min="0" max="1" value="0.85" step="0.05">
+                        <label>Protection <span class="value" id="labelProtectionValue">1.0</span></label>
+                        <input type="range" id="labelProtection" min="0" max="1" value="1.0" step="0.05">
                         <small style="color:#666;font-size:10px;">0=full enhance, 1=fully protected</small>
                     </div>
                 </div>
@@ -1000,7 +1000,7 @@ output_size = ${s.output_size}`;
             sliders.sharpness.el.value = 1.15;
             sliders.denoise.el.value = 3;
             sliders.labelThreshold.el.value = 200;
-            sliders.labelProtection.el.value = 0.85;
+            sliders.labelProtection.el.value = 1.0;
             sliders.erodeSize.el.value = 10;
             sliders.edgeErode.el.value = 1;
             sliders.edgeSmooth.el.value = 3;
@@ -1038,22 +1038,22 @@ output_size = ${s.output_size}`;
             const presets = {
                 default: {
                     claheClip: 2.0, shadowLift: 15, brightness: 1.05, contrast: 1.10,
-                    sharpness: 1.15, denoise: 3, labelThreshold: 200, labelProtection: 0.85,
+                    sharpness: 1.15, denoise: 3, labelThreshold: 200, labelProtection: 1.0,
                     colorCorrection: true
                 },
                 highContrast: {
                     claheClip: 3.0, shadowLift: 25, brightness: 1.08, contrast: 1.20,
-                    sharpness: 1.25, denoise: 2, labelThreshold: 200, labelProtection: 0.90,
+                    sharpness: 1.25, denoise: 2, labelThreshold: 200, labelProtection: 1.0,
                     colorCorrection: true
                 },
                 labelFocus: {
                     claheClip: 1.5, shadowLift: 10, brightness: 1.02, contrast: 1.05,
-                    sharpness: 1.10, denoise: 3, labelThreshold: 180, labelProtection: 0.95,
+                    sharpness: 1.10, denoise: 3, labelThreshold: 180, labelProtection: 1.0,
                     colorCorrection: true
                 },
                 natural: {
                     claheClip: 1.0, shadowLift: 10, brightness: 1.0, contrast: 1.05,
-                    sharpness: 1.05, denoise: 2, labelThreshold: 200, labelProtection: 0.80,
+                    sharpness: 1.05, denoise: 2, labelThreshold: 200, labelProtection: 1.0,
                     colorCorrection: false
                 }
             };
