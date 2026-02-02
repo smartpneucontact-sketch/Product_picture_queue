@@ -302,12 +302,7 @@ def process_images(image_ids, app, upload_to_shopify=True):
                         image.status = 'failed'
                         image.error_message = f"Shopify upload failed: {str(e)}"
                 db.session.commit()
-        elif not upload_to_shopify:
-            # Mark as completed without Shopify upload
-            for image in images:
-                if image.status == 'processed':
-                    image.status = 'completed'
-            db.session.commit()
+        # If not uploading to Shopify, leave status as 'processed' (not 'completed')
 
 
 @app.route('/api/images/<int:image_id>/retry', methods=['POST'])
