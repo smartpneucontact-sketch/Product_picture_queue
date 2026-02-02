@@ -332,6 +332,33 @@
             font-size: 10px;
         }
         
+        .download-links {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .download-links a {
+            flex: 1;
+            text-align: center;
+            padding: 6px;
+            background: #333;
+            color: #4CAF50;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 10px;
+            transition: background 0.2s;
+        }
+        
+        .download-links a:hover {
+            background: #444;
+        }
+        
+        .download-links a.disabled {
+            color: #666;
+            pointer-events: none;
+        }
+        
         /* Upload Area */
         .upload-area {
             background: #252540;
@@ -509,6 +536,7 @@
         let allImages = [];
         let selectedIds = new Set();
         let currentFilter = '';
+        let openDays = new Set(); // Track which days are open
         
         // Load images
         async function loadImages() {
@@ -567,8 +595,13 @@
                 return;
             }
             
-            container.innerHTML = days.map((day, index) => `
-                <div class="day-section ${index === 0 ? 'open' : ''}" data-date="${day.date}">
+            // If no days are open yet, open the first one
+            if (openDays.size === 0 && days.length > 0) {
+                openDays.add(days[0].date);
+            }
+            
+            container.innerHTML = days.map((day) => `
+                <div class="day-section ${openDays.has(day.date) ? 'open' : ''}" data-date="${day.date}">
                     <div class="day-header" onclick="toggleDay('${day.date}')">
                         <h3>
                             <span class="arrow">▶</span>
@@ -613,6 +646,11 @@
                         <div class="filename" title="${img.original_filename}">${img.original_filename}</div>
                         ${img.sku ? `<div class="sku">SKU: ${img.sku}</div>` : ''}
                         <span class="status status-${img.status}">${img.status}</span>
+                        <div class="download-links">
+                            <a href="${img.original_url}" download target="_blank">⬇ Original</a>
+                            <a href="${img.processed_url || '#'}" download target="_blank" 
+                               class="${img.processed_url ? '' : 'disabled'}">⬇ Processed</a>
+                        </div>
                         ${img.status === 'failed' ? `
                             <div class="image-actions">
                                 <button class="btn btn-primary" onclick="retryImage(${img.id})">Retry</button>
@@ -625,7 +663,15 @@
         
         function toggleDay(date) {
             const section = document.querySelector(`.day-section[data-date="${date}"]`);
-            section.classList.toggle('open');
+            const isOpen = section.classList.contains('open');
+            
+            if (isOpen) {
+                section.classList.remove('open');
+                openDays.delete(date);
+            } else {
+                section.classList.add('open');
+                openDays.add(date);
+            }
         }
         
         function selectDay(date) {
@@ -843,8 +889,8 @@
             setTimeout(() => toast.classList.remove('show'), 3000);
         }
         
-        // Auto-refresh
-        setInterval(loadImages, 10000);
+        // Auto-refresh every 30 seconds
+        setInterval(loadImages, 30000);
         
         // Init
         loadImages();

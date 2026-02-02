@@ -361,6 +361,33 @@
             font-size: 10px;
         }
         
+        .download-links {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        
+        .download-links a {
+            flex: 1;
+            text-align: center;
+            padding: 5px;
+            background: #1a1a2e;
+            color: #4CAF50;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 9px;
+            transition: background 0.2s;
+        }
+        
+        .download-links a:hover {
+            background: #333;
+        }
+        
+        .download-links a.disabled {
+            color: #555;
+            pointer-events: none;
+        }
+        
         /* Loading */
         .loading {
             text-align: center;
@@ -711,6 +738,11 @@ self.output_size = ${s.output_size}`;
                                 ⚡ Reprocess
                             </button>
                         </div>
+                        <div class="download-links">
+                            <a href="${img.original_url}" download target="_blank">⬇ Original</a>
+                            <a href="${img.processed_url || '#'}" download target="_blank" 
+                               class="${img.processed_url ? '' : 'disabled'}" id="dl-${img.id}">⬇ Processed</a>
+                        </div>
                     </div>
                 </div>
             `).join('');
@@ -740,10 +772,17 @@ self.output_size = ${s.output_size}`;
                 console.log('Result:', result);
                 
                 if (result.success) {
+                    const newUrl = result.processed_url + '?t=' + Date.now();
                     processedDiv.innerHTML = `
-                        <img src="${result.processed_url}?t=${Date.now()}" alt="Processed">
+                        <img src="${newUrl}" alt="Processed">
                         <span class="img-label">Proc</span>
                     `;
+                    // Update download link
+                    const dlLink = document.getElementById(`dl-${id}`);
+                    if (dlLink) {
+                        dlLink.href = result.processed_url;
+                        dlLink.classList.remove('disabled');
+                    }
                     showToast(`Done in ${result.time.toFixed(1)}s`, 'success');
                 } else {
                     processedDiv.innerHTML = '<span class="placeholder">Error</span><span class="img-label">Proc</span>';
