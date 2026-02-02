@@ -212,6 +212,75 @@ def assign_sku():
     })
 
 
+@app.route('/api/draft', methods=['POST'])
+def draft_sku():
+    """
+    Assign a SKU to selected images WITHOUT processing or uploading.
+    Just saves the SKU as a draft for later processing.
+    Expects: {'image_ids': [1, 2, 3], 'sku': 'ABC123'}
+    """
+    data = request.get_json()
+    image_ids = data.get('image_ids', [])
+    sku = data.get('sku', '').strip()
+    
+    if not image_ids:
+        return jsonify({'error': 'No images selected'}), 400
+    
+    if not sku:
+        return jsonify({'error': 'SKU is required'}), 400
+    
+    # Update images with SKU but mark as draft
+    images = Image.query.filter(Image.id.in_(image_ids)).all()
+    
+    for image in images:
+        image.sku = sku
+        image.status = 'draft'
+        image.assigned_at = datetime.utcnow()
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Saved {len(images)} images as draft with SKU {sku}'
+    })
+
+
+@app.route('/api/process-drafts', methods=['POST'])
+def process_drafts():
+    """
+    Process draft images and upload to Shopify.
+    Expects: {'image_ids': [1, 2, 3]} or {'sku': 'ABC123'}
+    """
+    data = request.get_json()
+    image_ids = data.get('image_ids', [])
+    sku = data.get('sku', '').strip()
+    
+    if image_ids:
+        images = Image.query.filter(Image.id.in_(image_ids), Image.status == 'draft').all()
+    elif sku:
+        images = Image.query.filter(Image.sku == sku, Image.status == 'draft').all()
+    else:
+        return jsonify({'error': 'Provide image_ids or sku'}), 400
+    
+    if not images:
+        return jsonify({'error': 'No draft images found'}), 400
+    
+    image_ids = [img.id for img in images]
+    
+    for image in images:
+        image.status = 'assigned'
+    db.session.commit()
+    
+    # Start processing in background thread
+    thread = threading.Thread(target=process_images, args=(image_ids, app, True))
+    thread.start()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Processing {len(images)} draft images'
+    })
+
+
 @app.route('/api/process', methods=['POST'])
 def process_only():
     """

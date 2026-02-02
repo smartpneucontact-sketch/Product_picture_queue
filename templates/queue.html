@@ -314,6 +314,7 @@
         }
         
         .status-pending { background: #ff9800; color: #000; }
+        .status-draft { background: #9c27b0; color: #fff; }
         .status-assigned { background: #2196F3; color: #fff; }
         .status-processing { background: #9C27B0; color: #fff; }
         .status-processed { background: #00BCD4; color: #fff; }
@@ -498,8 +499,10 @@
             <div class="sku-input">
                 <input type="text" id="skuInput" placeholder="Enter SKU...">
                 <button class="btn btn-primary" id="assignBtn" disabled>Assign & Process</button>
+                <button class="btn btn-secondary" id="draftBtn" disabled>Save Draft</button>
             </div>
             <button class="btn btn-secondary" id="processOnlyBtn" disabled>Process Only</button>
+            <button class="btn btn-secondary" id="processDraftsBtn" disabled>Process Drafts</button>
             <button class="btn btn-danger" id="deleteBtn" disabled>Delete Selected</button>
             <span class="selection-info" id="selectionInfo">0 selected</span>
         </div>
@@ -508,6 +511,7 @@
         <div class="tabs">
             <button class="tab active" data-status="">All</button>
             <button class="tab" data-status="pending">Pending</button>
+            <button class="tab" data-status="draft">Draft</button>
             <button class="tab" data-status="processing">Processing</button>
             <button class="tab" data-status="completed">Completed</button>
             <button class="tab" data-status="failed">Failed</button>
@@ -709,8 +713,16 @@
             const count = selectedIds.size;
             document.getElementById('selectionInfo').textContent = `${count} selected`;
             document.getElementById('assignBtn').disabled = count === 0;
+            document.getElementById('draftBtn').disabled = count === 0;
             document.getElementById('processOnlyBtn').disabled = count === 0;
             document.getElementById('deleteBtn').disabled = count === 0;
+            
+            // Enable processDrafts only if any selected images are drafts
+            const hasDrafts = Array.from(selectedIds).some(id => {
+                const img = allImages.find(i => i.id === id);
+                return img && img.status === 'draft';
+            });
+            document.getElementById('processDraftsBtn').disabled = !hasDrafts;
         }
         
         function formatDate(dateStr) {
@@ -836,6 +848,71 @@
             showToast('Deleted', 'success');
             selectedIds.clear();
             loadImages();
+        });
+        
+        // Draft button - save SKU without processing
+        document.getElementById('draftBtn').addEventListener('click', async () => {
+            const sku = document.getElementById('skuInput').value.trim();
+            if (!sku) {
+                showToast('Enter SKU first', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/draft', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_ids: Array.from(selectedIds),
+                        sku: sku
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, 'success');
+                    selectedIds.clear();
+                    document.getElementById('skuInput').value = '';
+                    loadImages();
+                } else {
+                    showToast(result.error, 'error');
+                }
+            } catch (error) {
+                showToast('Failed to save draft', 'error');
+            }
+        });
+        
+        // Process drafts button
+        document.getElementById('processDraftsBtn').addEventListener('click', async () => {
+            // Get all selected draft images
+            const draftIds = Array.from(selectedIds).filter(id => {
+                const img = allImages.find(i => i.id === id);
+                return img && img.status === 'draft';
+            });
+            
+            if (draftIds.length === 0) {
+                showToast('Select draft images first', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/process-drafts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_ids: draftIds })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, 'success');
+                    selectedIds.clear();
+                    loadImages();
+                } else {
+                    showToast(result.error, 'error');
+                }
+            } catch (error) {
+                showToast('Failed to process drafts', 'error');
+            }
         });
         
         async function retryImage(id) {

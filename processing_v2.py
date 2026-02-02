@@ -442,11 +442,32 @@ class ImageProcessorV2:
         if self.edge_refinement:
             img = self.refine_edges(img)
         
-        bbox = img.getbbox()
-        if bbox is None:
+        # Get alpha channel for bounding box
+        alpha = np.array(img.split()[3])
+        
+        # Find bounding box using alpha threshold (more robust than getbbox)
+        # getbbox can be affected by semi-transparent pixels
+        alpha_threshold = 10  # Pixels with alpha > 10 are considered content
+        content_mask = alpha > alpha_threshold
+        
+        if not np.any(content_mask):
             raise Exception("No content found in image")
         
-        logger.info(f"crop_to_square: bounding box {bbox}")
+        # Find rows and columns with content
+        rows_with_content = np.any(content_mask, axis=1)
+        cols_with_content = np.any(content_mask, axis=0)
+        
+        # Get bounding box
+        row_indices = np.where(rows_with_content)[0]
+        col_indices = np.where(cols_with_content)[0]
+        
+        top = row_indices[0]
+        bottom = row_indices[-1] + 1
+        left = col_indices[0]
+        right = col_indices[-1] + 1
+        
+        bbox = (left, top, right, bottom)
+        logger.info(f"crop_to_square: calculated bbox {bbox}")
         
         img_cropped = img.crop(bbox)
         width, height = img_cropped.size
@@ -459,6 +480,7 @@ class ImageProcessorV2:
         
         logger.info(f"crop_to_square: square_size={square_size}, margin={margin}px")
         
+        # Create new canvas and center
         square_img = Image.new('RGBA', (square_size, square_size), (255, 255, 255, 0))
         x_offset = (square_size - width) // 2
         y_offset = (square_size - height) // 2
@@ -467,9 +489,14 @@ class ImageProcessorV2:
         
         square_img.paste(img_cropped, (x_offset, y_offset), img_cropped)
         
+        # Resize if needed
         if square_size > self.output_size:
             square_img = square_img.resize((self.output_size, self.output_size), Image.Resampling.LANCZOS)
             logger.info(f"crop_to_square: resized to {self.output_size}x{self.output_size}")
+        elif square_size < self.output_size:
+            # Also resize up if smaller than target
+            square_img = square_img.resize((self.output_size, self.output_size), Image.Resampling.LANCZOS)
+            logger.info(f"crop_to_square: upscaled to {self.output_size}x{self.output_size}")
         
         return square_img
     

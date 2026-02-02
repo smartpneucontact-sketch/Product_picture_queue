@@ -212,6 +212,7 @@ class ImageProcessor:
     def crop_to_square(self, image_data):
         """
         Crop image to 1:1 aspect ratio with the subject centered.
+        Uses numpy-based bounding box for more reliable centering.
         """
         if isinstance(image_data, bytes):
             img = Image.open(BytesIO(image_data))
@@ -221,11 +222,30 @@ class ImageProcessor:
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
         
-        # Get bounding box of non-transparent pixels
-        bbox = img.getbbox()
+        # Get alpha channel for bounding box calculation
+        alpha = np.array(img.split()[3])
         
-        if bbox is None:
+        # Find content using alpha threshold (more robust than getbbox)
+        alpha_threshold = 10
+        content_mask = alpha > alpha_threshold
+        
+        if not np.any(content_mask):
             raise Exception("No content found in image")
+        
+        # Find rows and columns with content
+        rows_with_content = np.any(content_mask, axis=1)
+        cols_with_content = np.any(content_mask, axis=0)
+        
+        row_indices = np.where(rows_with_content)[0]
+        col_indices = np.where(cols_with_content)[0]
+        
+        top = row_indices[0]
+        bottom = row_indices[-1] + 1
+        left = col_indices[0]
+        right = col_indices[-1] + 1
+        
+        bbox = (left, top, right, bottom)
+        logger.info(f"crop_to_square: bbox={bbox}")
         
         # Crop to content
         img_cropped = img.crop(bbox)
@@ -244,8 +264,10 @@ class ImageProcessor:
         y_offset = (square_size - height) // 2
         square_img.paste(img_cropped, (x_offset, y_offset), img_cropped)
         
-        # Resize if needed
-        if square_size > self.output_size:
+        logger.info(f"crop_to_square: centered at ({x_offset}, {y_offset}), square={square_size}")
+        
+        # Resize to output size
+        if square_size != self.output_size:
             square_img = square_img.resize((self.output_size, self.output_size), Image.Resampling.LANCZOS)
         
         return square_img
