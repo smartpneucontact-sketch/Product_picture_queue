@@ -477,16 +477,6 @@
                         <input type="checkbox" id="removeBg" checked>
                         <label for="removeBg">Remove background</label>
                     </div>
-                    
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="alphaMatting" checked>
-                        <label for="alphaMatting">Alpha matting (better edges)</label>
-                    </div>
-                    
-                    <div class="control-group">
-                        <label>Edge Erode <span class="value" id="erodeSizeValue">12</span></label>
-                        <input type="range" id="erodeSize" min="0" max="30" value="12" step="1">
-                    </div>
                 </div>
                 
                 <div class="control-section">
@@ -560,14 +550,12 @@
             brightness: { el: document.getElementById('brightness'), value: document.getElementById('brightnessValue') },
             contrast: { el: document.getElementById('contrast'), value: document.getElementById('contrastValue') },
             sharpness: { el: document.getElementById('sharpness'), value: document.getElementById('sharpnessValue') },
-            erodeSize: { el: document.getElementById('erodeSize'), value: document.getElementById('erodeSizeValue') },
             margin: { el: document.getElementById('margin'), value: document.getElementById('marginValue') },
             outputSize: { el: document.getElementById('outputSize'), value: document.getElementById('outputSizeValue') },
         };
         
         const checkboxes = {
             removeBg: document.getElementById('removeBg'),
-            alphaMatting: document.getElementById('alphaMatting'),
             saveToCloud: document.getElementById('saveToCloud'),
         };
         
@@ -590,9 +578,6 @@
                 contrast: parseFloat(sliders.contrast.el.value),
                 sharpness: parseFloat(sliders.sharpness.el.value),
                 remove_bg: checkboxes.removeBg.checked,
-                alpha_matting: checkboxes.alphaMatting.checked,
-                erode_size: parseInt(sliders.erodeSize.el.value),
-                crop_square: true,
                 margin_percent: parseInt(sliders.margin.el.value),
                 output_size: parseInt(sliders.outputSize.el.value),
                 save_to_cloud: checkboxes.saveToCloud.checked,
@@ -606,8 +591,6 @@ self.brightness_factor = ${s.brightness}
 self.contrast_factor = ${s.contrast}
 self.sharpness_factor = ${s.sharpness}
 self.shadow_lift = ${s.shadow_lift}
-self.use_alpha_matting = ${s.alpha_matting ? 'True' : 'False'}
-self.erode_size = ${s.erode_size}
 self.margin_percent = ${s.margin_percent}
 self.output_size = ${s.output_size}`;
         }
@@ -832,7 +815,6 @@ self.output_size = ${s.output_size}`;
             sliders.brightness.el.value = 1.10;
             sliders.contrast.el.value = 1.15;
             sliders.sharpness.el.value = 1.15;
-            sliders.erodeSize.el.value = 12;
             sliders.margin.el.value = 4;
             sliders.outputSize.el.value = 2048;
             
@@ -841,7 +823,6 @@ self.output_size = ${s.output_size}`;
             });
             
             checkboxes.removeBg.checked = true;
-            checkboxes.alphaMatting.checked = true;
             checkboxes.saveToCloud.checked = true;
             
             updateSettingsCode();

@@ -5,16 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartPneu Studio - Image Queue</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            color: #333;
+            background: #1a1a2e;
+            color: #fff;
             min-height: 100vh;
         }
         
@@ -25,8 +21,7 @@
         }
         
         header {
-            background: #1a1a2e;
-            color: white;
+            background: #252540;
             padding: 20px;
             margin-bottom: 20px;
             border-radius: 12px;
@@ -35,30 +30,28 @@
             align-items: center;
         }
         
-        header h1 {
-            font-size: 24px;
-            font-weight: 600;
+        header h1 { font-size: 24px; }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }
         
         .stats {
             display: flex;
-            gap: 20px;
-            align-items: center;
+            gap: 15px;
         }
         
         .stat {
             text-align: center;
+            background: #1a1a2e;
+            padding: 8px 15px;
+            border-radius: 8px;
         }
         
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-        }
-        
-        .stat-label {
-            font-size: 12px;
-            opacity: 0.8;
-        }
+        .stat-value { font-size: 20px; font-weight: bold; }
+        .stat-label { font-size: 11px; opacity: 0.7; }
         
         .lab-link {
             background: #4CAF50;
@@ -68,41 +61,13 @@
             text-decoration: none;
             font-weight: 600;
             font-size: 14px;
-            transition: background 0.2s;
         }
         
-        .lab-link:hover {
-            background: #45a049;
-        }
+        .lab-link:hover { background: #45a049; }
         
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        .tab {
-            padding: 10px 20px;
-            background: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        
-        .tab:hover {
-            background: #e0e0e0;
-        }
-        
-        .tab.active {
-            background: #1a1a2e;
-            color: white;
-        }
-        
+        /* Actions Bar */
         .actions-bar {
-            background: white;
+            background: #252540;
             padding: 15px 20px;
             border-radius: 12px;
             margin-bottom: 20px;
@@ -115,208 +80,262 @@
         .sku-input {
             display: flex;
             gap: 10px;
+            align-items: center;
         }
         
         .sku-input input {
             padding: 10px 15px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #333;
             border-radius: 8px;
+            background: #1a1a2e;
+            color: white;
             font-size: 14px;
             width: 200px;
         }
         
         .sku-input input:focus {
             outline: none;
-            border-color: #1a1a2e;
+            border-color: #4CAF50;
         }
         
         .btn {
             padding: 10px 20px;
             border: none;
             border-radius: 8px;
-            cursor: pointer;
             font-size: 14px;
-            font-weight: 500;
+            font-weight: 600;
+            cursor: pointer;
             transition: all 0.2s;
         }
         
-        .btn-primary {
-            background: #1a1a2e;
-            color: white;
-        }
+        .btn-primary { background: #4CAF50; color: white; }
+        .btn-primary:hover { background: #45a049; }
+        .btn-secondary { background: #444; color: white; }
+        .btn-secondary:hover { background: #555; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-danger:hover { background: #d32f2f; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        .btn-primary:hover:not(:disabled) {
-            background: #2a2a4e;
-        }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
         
-        .btn-secondary {
-            background: #e0e0e0;
-            color: #333;
-        }
-        
-        .btn-secondary:hover {
-            background: #d0d0d0;
-        }
-        
-        .btn-danger {
-            background: #f44336;
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background: #d32f2f;
-        }
-        
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .selected-count {
+        .selection-info {
+            color: #888;
             font-size: 14px;
-            color: #666;
         }
         
-        .image-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
+        /* Filter Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
         }
         
-        .image-card {
-            background: white;
+        .tab {
+            padding: 8px 16px;
+            background: #252540;
+            border: none;
+            border-radius: 8px;
+            color: #888;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        
+        .tab:hover { background: #333; }
+        .tab.active { background: #4CAF50; color: white; }
+        
+        /* Day Section */
+        .day-section {
+            background: #252540;
             border-radius: 12px;
+            margin-bottom: 15px;
             overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .day-header {
+            padding: 15px 20px;
             cursor: pointer;
-            transition: all 0.2s;
-            position: relative;
-        }
-        
-        .image-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-        }
-        
-        .image-card.selected {
-            box-shadow: 0 0 0 3px #4CAF50;
-        }
-        
-        .image-card img {
-            width: 100%;
-            aspect-ratio: 1;
-            object-fit: cover;
-        }
-        
-        .image-card .info {
-            padding: 12px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            transition: background 0.2s;
+        }
+        
+        .day-header:hover { background: #2a2a4e; }
+        
+        .day-header h3 {
+            font-size: 16px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .day-header .arrow {
+            transition: transform 0.3s;
+            font-size: 12px;
+        }
+        
+        .day-section.open .day-header .arrow {
+            transform: rotate(90deg);
+        }
+        
+        .day-meta {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .day-meta .count {
+            background: #1a1a2e;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        
+        .day-content {
+            display: none;
+            padding: 0 20px 20px;
+        }
+        
+        .day-section.open .day-content {
+            display: block;
+        }
+        
+        .day-actions {
+            display: flex;
+            gap: 10px;
+            padding: 10px 0 15px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 15px;
+        }
+        
+        /* Image Grid - 3 columns */
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        
+        .image-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .image-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        
+        .image-card.selected {
+            outline: 3px solid #4CAF50;
         }
         
         .image-card .checkbox {
             position: absolute;
             top: 10px;
             left: 10px;
+            z-index: 10;
             width: 24px;
             height: 24px;
-            background: white;
-            border-radius: 50%;
+            accent-color: #4CAF50;
+            cursor: pointer;
+        }
+        
+        .image-compare {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+            background: #333;
+        }
+        
+        .image-compare .img-wrapper {
+            background: #fff;
+            aspect-ratio: 1;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
-        
-        .image-card.selected .checkbox {
-            background: #4CAF50;
-            color: white;
-        }
-        
-        .image-card .delete-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 28px;
-            height: 28px;
-            background: rgba(244, 67, 54, 0.9);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 14px;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        
-        .image-card:hover .delete-btn {
-            opacity: 1;
-        }
-        
-        .image-card .preview-btn {
-            position: absolute;
-            top: 10px;
-            right: 45px;
-            width: 28px;
-            height: 28px;
-            background: rgba(26, 26, 46, 0.9);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 14px;
-            opacity: 0;
-            transition: opacity 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .image-card:hover .preview-btn {
-            opacity: 1;
-        }
-        
-        .image-card .sku-badge {
-            position: absolute;
-            bottom: 50px;
-            left: 10px;
-            right: 10px;
-            background: rgba(26, 26, 46, 0.9);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-            text-align: center;
+            position: relative;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
         
-        .status {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
+        .image-compare img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            cursor: pointer;
+        }
+        
+        .image-compare .img-label {
+            position: absolute;
+            bottom: 4px;
+            left: 4px;
+            background: rgba(0,0,0,0.7);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 9px;
             text-transform: uppercase;
         }
         
-        .status-pending { background: #FFF3E0; color: #E65100; }
-        .status-assigned { background: #E3F2FD; color: #1565C0; }
-        .status-processing { background: #E8F5E9; color: #2E7D32; }
-        .status-processed { background: #E8F5E9; color: #2E7D32; }
-        .status-completed { background: #E8F5E9; color: #2E7D32; }
-        .status-failed { background: #FFEBEE; color: #C62828; }
-        
-        .time {
-            font-size: 11px;
-            color: #888;
+        .image-compare .placeholder {
+            color: #999;
+            font-size: 10px;
         }
         
+        .image-info {
+            padding: 12px;
+        }
+        
+        .image-info .filename {
+            font-size: 11px;
+            color: #888;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 6px;
+        }
+        
+        .image-info .sku {
+            font-size: 14px;
+            font-weight: 600;
+            color: #4CAF50;
+            margin-bottom: 6px;
+        }
+        
+        .image-info .status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        
+        .status-pending { background: #ff9800; color: #000; }
+        .status-assigned { background: #2196F3; color: #fff; }
+        .status-processing { background: #9C27B0; color: #fff; }
+        .status-processed { background: #00BCD4; color: #fff; }
+        .status-completed { background: #4CAF50; color: #fff; }
+        .status-failed { background: #f44336; color: #fff; }
+        
+        .image-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        
+        .image-actions .btn {
+            flex: 1;
+            padding: 6px;
+            font-size: 10px;
+        }
+        
+        /* Upload Area */
         .upload-area {
-            border: 2px dashed #ccc;
+            background: #252540;
+            border: 2px dashed #444;
             border-radius: 12px;
             padding: 30px;
             text-align: center;
@@ -326,285 +345,139 @@
         }
         
         .upload-area:hover {
-            border-color: #1a1a2e;
-            background: #f9f9f9;
+            border-color: #4CAF50;
+            background: #2a2a4e;
         }
         
         .upload-area.dragover {
             border-color: #4CAF50;
-            background: #E8F5E9;
+            background: #2a2a4e;
         }
         
-        .upload-area input {
+        .upload-area input { display: none; }
+        
+        .upload-area h3 { margin-bottom: 10px; }
+        .upload-area p { color: #888; font-size: 14px; }
+        
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid #333;
+            border-top-color: #4CAF50;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #333;
+            padding: 15px 25px;
+            border-radius: 8px;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: #4CAF50; }
+        .toast.error { background: #f44336; }
+        
+        /* Lightbox */
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.9);
             display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        
+        .lightbox.show { display: flex; }
+        
+        .lightbox img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+        
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
         }
         
         .empty-state {
             text-align: center;
             padding: 60px 20px;
-            color: #888;
+            color: #666;
         }
         
-        .empty-state svg {
-            width: 80px;
-            height: 80px;
-            margin-bottom: 20px;
-            opacity: 0.5;
-        }
-        
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #333;
-            color: white;
-            padding: 16px 24px;
-            border-radius: 8px;
-            display: none;
-            z-index: 1001;
-        }
-        
-        .toast.success { background: #4CAF50; }
-        .toast.error { background: #f44336; }
-        .toast.show { display: block; }
-        
-        /* Details Modal */
-        .modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.5);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        
-        .modal.show { display: flex; }
-        
-        .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 16px;
-            max-width: 500px;
-            width: 90%;
-        }
-        
-        .modal-content h2 {
-            margin-bottom: 20px;
-        }
-        
-        .modal-content img {
-            width: 100%;
-            border-radius: 8px;
-            margin-bottom: 15px;
-        }
-        
-        .modal-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 20px;
-        }
-
-        /* Large Preview Lightbox */
-        .lightbox {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.95);
-            display: none;
-            flex-direction: column;
-            z-index: 2000;
-        }
-        
-        .lightbox.show { display: flex; }
-        
-        .lightbox-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            color: white;
-        }
-        
-        .lightbox-header h3 {
-            font-size: 16px;
-            font-weight: 500;
-        }
-        
-        .lightbox-close {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 32px;
-            cursor: pointer;
-            padding: 0 10px;
-        }
-        
-        .lightbox-body {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .lightbox-image-container {
-            max-width: 90%;
-            max-height: 80vh;
-            display: flex;
-            gap: 20px;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .lightbox-image-wrapper {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        
-        .lightbox-image-wrapper img {
-            max-width: 100%;
-            max-height: 70vh;
-            object-fit: contain;
-            border-radius: 8px;
-        }
-        
-        .lightbox-image-wrapper .image-label {
-            color: #aaa;
-            font-size: 14px;
-            margin-top: 10px;
-            text-transform: uppercase;
-        }
-        
-        .lightbox-nav {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(255,255,255,0.1);
-            border: none;
-            color: white;
-            font-size: 48px;
-            padding: 20px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        
-        .lightbox-nav:hover {
-            background: rgba(255,255,255,0.2);
-        }
-        
-        .lightbox-nav.prev { left: 10px; }
-        .lightbox-nav.next { right: 10px; }
-        
-        .lightbox-footer {
-            padding: 15px 20px;
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            color: white;
-        }
-        
-        .lightbox-info {
-            display: flex;
-            gap: 30px;
-            font-size: 14px;
-        }
-        
-        .lightbox-info span {
-            color: #888;
-        }
-        
-        .lightbox-counter {
-            color: #888;
-            font-size: 14px;
-        }
-        
-        .lightbox-toggle {
-            display: flex;
-            gap: 10px;
-            margin-left: auto;
-        }
-        
-        .lightbox-toggle button {
-            padding: 8px 16px;
-            border: 1px solid #555;
-            background: transparent;
-            color: white;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        
-        .lightbox-toggle button.active {
-            background: white;
-            color: #333;
-        }
-
-        .lightbox-downloads {
-            display: flex;
-            gap: 10px;
-        }
-
-        .lightbox-downloads button {
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 13px;
-        }
-
-        .refresh-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 8px;
-            transition: background 0.2s;
-        }
-
-        .refresh-btn:hover {
-            background: rgba(255,255,255,0.1);
-        }
-
-        .refresh-btn svg {
-            width: 20px;
-            height: 20px;
-        }
-
-        .loading {
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
+        .empty-state h3 { margin-bottom: 10px; color: #888; }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>📷 SmartPneu Studio</h1>
-            <div class="stats">
-                <div class="stat">
-                    <div class="stat-value" id="pending-count">0</div>
-                    <div class="stat-label">Pending</div>
+            <div class="header-right">
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-value" id="pending-count">0</div>
+                        <div class="stat-label">Pending</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="processing-count">0</div>
+                        <div class="stat-label">Processing</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="completed-count">0</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
                 </div>
-                <div class="stat">
-                    <div class="stat-value" id="processing-count">0</div>
-                    <div class="stat-label">Processing</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="completed-count">0</div>
-                    <div class="stat-label">Completed</div>
-                </div>
-                <button class="refresh-btn" onclick="loadImages()" title="Refresh">
-                    <svg id="refresh-icon" fill="white" viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-                </button>
                 <a href="/lab" class="lab-link">🔬 Processing Lab</a>
             </div>
         </header>
-
+        
+        <!-- Upload Area -->
+        <div class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput" accept="image/*" multiple>
+            <h3>📁 Drop images here or click to upload</h3>
+            <p>Supports JPG, PNG, WEBP</p>
+        </div>
+        
+        <!-- Actions Bar -->
+        <div class="actions-bar">
+            <div class="sku-input">
+                <input type="text" id="skuInput" placeholder="Enter SKU...">
+                <button class="btn btn-primary" id="assignBtn" disabled>Assign & Process</button>
+            </div>
+            <button class="btn btn-secondary" id="processOnlyBtn" disabled>Process Only</button>
+            <button class="btn btn-danger" id="deleteBtn" disabled>Delete Selected</button>
+            <span class="selection-info" id="selectionInfo">0 selected</span>
+        </div>
+        
+        <!-- Filter Tabs -->
         <div class="tabs">
             <button class="tab active" data-status="">All</button>
             <button class="tab" data-status="pending">Pending</button>
@@ -612,270 +485,252 @@
             <button class="tab" data-status="completed">Completed</button>
             <button class="tab" data-status="failed">Failed</button>
         </div>
-
-        <div class="upload-area" id="upload-area">
-            <input type="file" id="file-input" accept="image/*" multiple>
-            <p>📁 Drop images here or click to upload manually</p>
-        </div>
-
-        <div class="actions-bar">
-            <span class="selected-count"><span id="selected-count">0</span> selected</span>
-            <button class="btn btn-secondary" id="process-only-btn" disabled>⚙️ Process Only</button>
-            <div class="sku-input">
-                <input type="text" id="sku-input" placeholder="Enter SKU (e.g., TIR-2024-001)">
-                <button class="btn btn-primary" id="assign-btn" disabled>Assign & Process</button>
-            </div>
-            <button class="btn btn-secondary" id="select-all-btn">Select All</button>
-            <button class="btn btn-danger" id="delete-selected-btn" disabled>Delete Selected</button>
-        </div>
-
-        <div class="image-grid" id="image-grid">
-            <!-- Images will be loaded here -->
-        </div>
-
-        <div class="empty-state" id="empty-state" style="display: none;">
-            <svg fill="#ccc" viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
-            <h3>No images in queue</h3>
-            <p>Images from the studio will appear here</p>
-        </div>
-    </div>
-
-    <div class="toast" id="toast"></div>
-
-    <!-- Details Modal -->
-    <div class="modal" id="image-modal">
-        <div class="modal-content">
-            <h2>Image Details</h2>
-            <img id="modal-image" src="">
-            <p><strong>Status:</strong> <span id="modal-status"></span></p>
-            <p><strong>SKU:</strong> <span id="modal-sku">-</span></p>
-            <p><strong>Created:</strong> <span id="modal-created"></span></p>
-            <p id="modal-error" style="color: #f44336; display: none;"><strong>Error:</strong> <span id="modal-error-text"></span></p>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closeModal()">Close</button>
-                <button class="btn btn-danger" id="modal-delete-btn">Delete</button>
-                <button class="btn btn-primary" id="modal-retry-btn" style="display: none;">Retry</button>
+        
+        <!-- Days Container -->
+        <div id="daysContainer">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading images...</p>
             </div>
         </div>
     </div>
-
-    <!-- Large Preview Lightbox -->
+    
+    <!-- Lightbox -->
     <div class="lightbox" id="lightbox">
-        <div class="lightbox-header">
-            <h3 id="lightbox-title">Image Preview</h3>
-            <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
-        </div>
-        <div class="lightbox-body">
-            <button class="lightbox-nav prev" onclick="lightboxPrev()">&#8249;</button>
-            <div class="lightbox-image-container" id="lightbox-container">
-                <div class="lightbox-image-wrapper" id="lightbox-original-wrapper">
-                    <img id="lightbox-original" src="">
-                    <div class="image-label">Original</div>
-                </div>
-                <div class="lightbox-image-wrapper" id="lightbox-processed-wrapper" style="display:none;">
-                    <img id="lightbox-processed" src="">
-                    <div class="image-label">Processed</div>
-                </div>
-            </div>
-            <button class="lightbox-nav next" onclick="lightboxNext()">&#8250;</button>
-        </div>
-        <div class="lightbox-footer">
-            <div class="lightbox-info">
-                <div><span>SKU:</span> <strong id="lightbox-sku">-</strong></div>
-                <div><span>Status:</span> <strong id="lightbox-status">-</strong></div>
-                <div class="lightbox-counter" id="lightbox-counter">1 / 10</div>
-            </div>
-            <div class="lightbox-downloads">
-                <button class="btn btn-secondary" id="download-original-btn" onclick="downloadOriginal()">⬇️ Original</button>
-                <button class="btn btn-secondary" id="download-processed-btn" onclick="downloadProcessed()" disabled>⬇️ Processed</button>
-            </div>
-            <div class="lightbox-toggle">
-                <button id="toggle-original" class="active" onclick="showOriginal()">Original</button>
-                <button id="toggle-processed" onclick="showProcessed()">Processed</button>
-                <button id="toggle-both" onclick="showBoth()">Both</button>
-            </div>
-        </div>
+        <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+        <img id="lightboxImg" src="">
     </div>
-
+    
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+    
     <script>
-        let images = [];
+        // State
+        let allImages = [];
         let selectedIds = new Set();
         let currentFilter = '';
-        let currentModalImage = null;
-        let currentLightboxIndex = 0;
-        let lightboxViewMode = 'original'; // 'original', 'processed', 'both'
-
-        // Load images on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            loadImages();
-            // Auto-refresh every 10 seconds
-            setInterval(loadImages, 10000);
-        });
-
-        // Tab switching
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                currentFilter = tab.dataset.status;
-                renderImages();
+        
+        // Load images
+        async function loadImages() {
+            try {
+                const response = await fetch('/api/images');
+                allImages = await response.json();
+                updateStats();
+                renderDays();
+            } catch (error) {
+                showToast('Failed to load images', 'error');
+            }
+        }
+        
+        function updateStats() {
+            const pending = allImages.filter(i => i.status === 'pending').length;
+            const processing = allImages.filter(i => ['assigned', 'processing'].includes(i.status)).length;
+            const completed = allImages.filter(i => i.status === 'completed').length;
+            
+            document.getElementById('pending-count').textContent = pending;
+            document.getElementById('processing-count').textContent = processing;
+            document.getElementById('completed-count').textContent = completed;
+        }
+        
+        function filterImages() {
+            if (!currentFilter) return allImages;
+            if (currentFilter === 'processing') {
+                return allImages.filter(i => ['assigned', 'processing', 'processed'].includes(i.status));
+            }
+            return allImages.filter(i => i.status === currentFilter);
+        }
+        
+        function groupByDay(images) {
+            const groups = {};
+            images.forEach(img => {
+                const date = img.created_at.split('T')[0];
+                if (!groups[date]) groups[date] = [];
+                groups[date].push(img);
             });
-        });
-
-        // File upload handling
-        const uploadArea = document.getElementById('upload-area');
-        const fileInput = document.getElementById('file-input');
-
+            // Sort by date descending
+            const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+            return sortedDates.map(date => ({ date, images: groups[date] }));
+        }
+        
+        function renderDays() {
+            const container = document.getElementById('daysContainer');
+            const filtered = filterImages();
+            const days = groupByDay(filtered);
+            
+            if (days.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No images</h3>
+                        <p>Upload images to get started</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = days.map((day, index) => `
+                <div class="day-section ${index === 0 ? 'open' : ''}" data-date="${day.date}">
+                    <div class="day-header" onclick="toggleDay('${day.date}')">
+                        <h3>
+                            <span class="arrow">▶</span>
+                            ${formatDate(day.date)}
+                        </h3>
+                        <div class="day-meta">
+                            <span class="count">${day.images.length} images</span>
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); selectDay('${day.date}')">Select All</button>
+                        </div>
+                    </div>
+                    <div class="day-content">
+                        <div class="image-grid">
+                            ${day.images.map(img => renderImageCard(img)).join('')}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function renderImageCard(img) {
+            const isSelected = selectedIds.has(img.id);
+            return `
+                <div class="image-card ${isSelected ? 'selected' : ''}" data-id="${img.id}">
+                    <input type="checkbox" class="checkbox" ${isSelected ? 'checked' : ''} 
+                           onchange="toggleSelect(${img.id}, this.checked)">
+                    <div class="image-compare">
+                        <div class="img-wrapper">
+                            <img src="${img.original_url}" alt="Original" loading="lazy" 
+                                 onclick="openLightbox('${img.original_url}')">
+                            <span class="img-label">Orig</span>
+                        </div>
+                        <div class="img-wrapper">
+                            ${img.processed_url 
+                                ? `<img src="${img.processed_url}" alt="Processed" loading="lazy"
+                                        onclick="openLightbox('${img.processed_url}')">`
+                                : '<span class="placeholder">Not processed</span>'
+                            }
+                            <span class="img-label">Proc</span>
+                        </div>
+                    </div>
+                    <div class="image-info">
+                        <div class="filename" title="${img.original_filename}">${img.original_filename}</div>
+                        ${img.sku ? `<div class="sku">SKU: ${img.sku}</div>` : ''}
+                        <span class="status status-${img.status}">${img.status}</span>
+                        ${img.status === 'failed' ? `
+                            <div class="image-actions">
+                                <button class="btn btn-primary" onclick="retryImage(${img.id})">Retry</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        
+        function toggleDay(date) {
+            const section = document.querySelector(`.day-section[data-date="${date}"]`);
+            section.classList.toggle('open');
+        }
+        
+        function selectDay(date) {
+            const day = groupByDay(filterImages()).find(d => d.date === date);
+            if (!day) return;
+            
+            const allSelected = day.images.every(img => selectedIds.has(img.id));
+            
+            day.images.forEach(img => {
+                if (allSelected) {
+                    selectedIds.delete(img.id);
+                } else {
+                    selectedIds.add(img.id);
+                }
+            });
+            
+            renderDays();
+            updateSelectionUI();
+        }
+        
+        function toggleSelect(id, checked) {
+            if (checked) {
+                selectedIds.add(id);
+            } else {
+                selectedIds.delete(id);
+            }
+            
+            const card = document.querySelector(`.image-card[data-id="${id}"]`);
+            if (card) card.classList.toggle('selected', checked);
+            
+            updateSelectionUI();
+        }
+        
+        function updateSelectionUI() {
+            const count = selectedIds.size;
+            document.getElementById('selectionInfo').textContent = `${count} selected`;
+            document.getElementById('assignBtn').disabled = count === 0;
+            document.getElementById('processOnlyBtn').disabled = count === 0;
+            document.getElementById('deleteBtn').disabled = count === 0;
+        }
+        
+        function formatDate(dateStr) {
+            const date = new Date(dateStr + 'T00:00:00');
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            const inputDate = new Date(dateStr + 'T00:00:00');
+            inputDate.setHours(0,0,0,0);
+            
+            if (inputDate.getTime() === today.getTime()) return '📅 Today';
+            if (inputDate.getTime() === yesterday.getTime()) return '📅 Yesterday';
+            
+            return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        }
+        
+        // Upload
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        
         uploadArea.addEventListener('click', () => fileInput.click());
-
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
         });
-
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadArea.classList.remove('dragover');
             handleFiles(e.dataTransfer.files);
         });
-
-        fileInput.addEventListener('change', () => {
-            handleFiles(fileInput.files);
-        });
-
+        fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+        
         async function handleFiles(files) {
             for (const file of files) {
                 const formData = new FormData();
                 formData.append('image', file);
-
+                
                 try {
                     const response = await fetch('/api/images/manual-upload', {
                         method: 'POST',
                         body: formData
                     });
-                    const data = await response.json();
-                    if (data.success) {
-                        showToast('Image uploaded successfully', 'success');
+                    
+                    if (response.ok) {
+                        showToast(`Uploaded: ${file.name}`, 'success');
                     } else {
-                        showToast(data.error || 'Upload failed', 'error');
+                        showToast(`Failed: ${file.name}`, 'error');
                     }
                 } catch (error) {
-                    showToast('Upload failed: ' + error.message, 'error');
+                    showToast(`Error: ${file.name}`, 'error');
                 }
             }
             loadImages();
         }
-
-        // Load images from API
-        async function loadImages() {
-            const refreshIcon = document.getElementById('refresh-icon');
-            refreshIcon.classList.add('loading');
-
-            try {
-                const response = await fetch('/api/images');
-                images = await response.json();
-                updateStats();
-                renderImages();
-            } catch (error) {
-                showToast('Failed to load images', 'error');
-            } finally {
-                refreshIcon.classList.remove('loading');
-            }
-        }
-
-        function updateStats() {
-            document.getElementById('pending-count').textContent = 
-                images.filter(i => i.status === 'pending').length;
-            document.getElementById('processing-count').textContent = 
-                images.filter(i => ['assigned', 'processing', 'processed'].includes(i.status)).length;
-            document.getElementById('completed-count').textContent = 
-                images.filter(i => i.status === 'completed').length;
-        }
-
-        function renderImages() {
-            const grid = document.getElementById('image-grid');
-            const emptyState = document.getElementById('empty-state');
-            
-            let filtered = images;
-            if (currentFilter) {
-                filtered = images.filter(i => i.status === currentFilter);
-            }
-
-            if (filtered.length === 0) {
-                grid.innerHTML = '';
-                emptyState.style.display = 'block';
-                return;
-            }
-
-            emptyState.style.display = 'none';
-            grid.innerHTML = filtered.map((img, index) => `
-                <div class="image-card ${selectedIds.has(img.id) ? 'selected' : ''}" 
-                     data-id="${img.id}"
-                     onclick="toggleSelect(${img.id}, event)">
-                    <div class="checkbox">${selectedIds.has(img.id) ? '✓' : ''}</div>
-                    ${img.sku ? `<div class="sku-badge">${img.sku}</div>` : ''}
-                    <img src="${img.processed_url || img.original_url}" alt="Tire image">
-                    <button class="preview-btn" onclick="openLightbox(${img.id}, event)" title="Preview">🔍</button>
-                    <button class="delete-btn" onclick="deleteImage(${img.id}, event)">✕</button>
-                    <div class="info">
-                        <span class="status status-${img.status}">${img.status}</span>
-                        <div class="time">${formatDate(img.created_at)}</div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function toggleSelect(id, event) {
-            if (event.target.classList.contains('delete-btn') || 
-                event.target.classList.contains('preview-btn')) return;
-            
-            // Double-click to open modal
-            if (event.detail === 2) {
-                openModal(id);
-                return;
-            }
-
-            if (selectedIds.has(id)) {
-                selectedIds.delete(id);
-            } else {
-                selectedIds.add(id);
-            }
-            updateSelection();
-            renderImages();
-        }
-
-        function updateSelection() {
-            const count = selectedIds.size;
-            document.getElementById('selected-count').textContent = count;
-            document.getElementById('assign-btn').disabled = count === 0;
-            document.getElementById('process-only-btn').disabled = count === 0;
-            document.getElementById('delete-selected-btn').disabled = count === 0;
-        }
-
-        // Select all visible pending images
-        document.getElementById('select-all-btn').addEventListener('click', () => {
-            const pendingImages = images.filter(i => i.status === 'pending');
-            if (selectedIds.size === pendingImages.length) {
-                selectedIds.clear();
-            } else {
-                pendingImages.forEach(i => selectedIds.add(i.id));
-            }
-            updateSelection();
-            renderImages();
-        });
-
-        // Assign SKU
-        document.getElementById('assign-btn').addEventListener('click', async () => {
-            const sku = document.getElementById('sku-input').value.trim();
+        
+        // Actions
+        document.getElementById('assignBtn').addEventListener('click', async () => {
+            const sku = document.getElementById('skuInput').value.trim();
             if (!sku) {
-                showToast('Please enter a SKU', 'error');
+                showToast('Enter SKU first', 'error');
                 return;
             }
-
+            
             try {
                 const response = await fetch('/api/assign', {
                     method: 'POST',
@@ -885,300 +740,114 @@
                         sku: sku
                     })
                 });
-                const data = await response.json();
-                if (data.success) {
-                    showToast(data.message, 'success');
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, 'success');
                     selectedIds.clear();
-                    document.getElementById('sku-input').value = '';
-                    updateSelection();
+                    document.getElementById('skuInput').value = '';
                     loadImages();
                 } else {
-                    showToast(data.error, 'error');
+                    showToast(result.error, 'error');
                 }
             } catch (error) {
-                showToast('Failed to assign SKU', 'error');
+                showToast('Failed to assign', 'error');
             }
         });
-
-        // Process Only (no SKU assignment)
-        document.getElementById('process-only-btn').addEventListener('click', async () => {
+        
+        document.getElementById('processOnlyBtn').addEventListener('click', async () => {
             try {
                 const response = await fetch('/api/process', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        image_ids: Array.from(selectedIds)
-                    })
+                    body: JSON.stringify({ image_ids: Array.from(selectedIds) })
                 });
-                const data = await response.json();
-                if (data.success) {
-                    showToast(data.message, 'success');
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, 'success');
                     selectedIds.clear();
-                    updateSelection();
                     loadImages();
                 } else {
-                    showToast(data.error, 'error');
+                    showToast(result.error, 'error');
                 }
             } catch (error) {
-                showToast('Failed to start processing', 'error');
+                showToast('Failed to process', 'error');
             }
         });
-
-        // Delete selected
-        document.getElementById('delete-selected-btn').addEventListener('click', async () => {
-            if (!confirm(`Delete ${selectedIds.size} image(s)?`)) return;
-
+        
+        document.getElementById('deleteBtn').addEventListener('click', async () => {
+            if (!confirm(`Delete ${selectedIds.size} images?`)) return;
+            
             for (const id of selectedIds) {
-                await deleteImageById(id);
-            }
-            selectedIds.clear();
-            updateSelection();
-            loadImages();
-        });
-
-        async function deleteImage(id, event) {
-            event.stopPropagation();
-            if (!confirm('Delete this image?')) return;
-            await deleteImageById(id);
-            loadImages();
-        }
-
-        async function deleteImageById(id) {
-            try {
-                await fetch(`/api/images/${id}`, { method: 'DELETE' });
-            } catch (error) {
-                showToast('Failed to delete image', 'error');
-            }
-        }
-
-        // Details Modal
-        function openModal(id) {
-            const img = images.find(i => i.id === id);
-            if (!img) return;
-
-            currentModalImage = img;
-            document.getElementById('modal-image').src = img.processed_url || img.original_url;
-            document.getElementById('modal-status').textContent = img.status;
-            document.getElementById('modal-sku').textContent = img.sku || '-';
-            document.getElementById('modal-created').textContent = formatDate(img.created_at);
-            
-            const errorEl = document.getElementById('modal-error');
-            if (img.error_message) {
-                document.getElementById('modal-error-text').textContent = img.error_message;
-                errorEl.style.display = 'block';
-            } else {
-                errorEl.style.display = 'none';
-            }
-
-            document.getElementById('modal-retry-btn').style.display = 
-                img.status === 'failed' ? 'inline-block' : 'none';
-
-            document.getElementById('image-modal').classList.add('show');
-        }
-
-        function closeModal() {
-            document.getElementById('image-modal').classList.remove('show');
-            currentModalImage = null;
-        }
-
-        document.getElementById('modal-delete-btn').addEventListener('click', async () => {
-            if (currentModalImage) {
-                await deleteImageById(currentModalImage.id);
-                closeModal();
-                loadImages();
-            }
-        });
-
-        document.getElementById('modal-retry-btn').addEventListener('click', async () => {
-            if (currentModalImage) {
                 try {
-                    await fetch(`/api/images/${currentModalImage.id}/retry`, { method: 'POST' });
-                    showToast('Retrying processing...', 'success');
-                    closeModal();
-                    loadImages();
+                    await fetch(`/api/images/${id}`, { method: 'DELETE' });
                 } catch (error) {
-                    showToast('Failed to retry', 'error');
+                    console.error('Delete error:', error);
                 }
             }
+            
+            showToast('Deleted', 'success');
+            selectedIds.clear();
+            loadImages();
         });
-
-        // Close modal on outside click
-        document.getElementById('image-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'image-modal') closeModal();
-        });
-
-        // ========== LIGHTBOX FUNCTIONS ==========
-        function getFilteredImages() {
-            if (currentFilter) {
-                return images.filter(i => i.status === currentFilter);
+        
+        async function retryImage(id) {
+            try {
+                const response = await fetch(`/api/images/${id}/retry`, { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Retrying...', 'success');
+                    loadImages();
+                } else {
+                    showToast(result.error, 'error');
+                }
+            } catch (error) {
+                showToast('Retry failed', 'error');
             }
-            return images;
         }
-
-        function openLightbox(id, event) {
-            if (event) event.stopPropagation();
-            
-            const filtered = getFilteredImages();
-            const index = filtered.findIndex(i => i.id === id);
-            if (index === -1) return;
-            
-            currentLightboxIndex = index;
-            updateLightbox();
+        
+        // Filter tabs
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentFilter = tab.dataset.status;
+                renderDays();
+            });
+        });
+        
+        // Lightbox
+        function openLightbox(url) {
+            document.getElementById('lightboxImg').src = url;
             document.getElementById('lightbox').classList.add('show');
         }
-
+        
         function closeLightbox() {
             document.getElementById('lightbox').classList.remove('show');
         }
-
-        function updateLightbox() {
-            const filtered = getFilteredImages();
-            const img = filtered[currentLightboxIndex];
-            if (!img) return;
-
-            // Update images
-            document.getElementById('lightbox-original').src = img.original_url;
-            document.getElementById('lightbox-processed').src = img.processed_url || img.original_url;
-            
-            // Update info
-            document.getElementById('lightbox-title').textContent = img.sku || 'Image Preview';
-            document.getElementById('lightbox-sku').textContent = img.sku || '-';
-            document.getElementById('lightbox-status').textContent = img.status;
-            document.getElementById('lightbox-counter').textContent = 
-                `${currentLightboxIndex + 1} / ${filtered.length}`;
-
-            // Update view based on mode and availability
-            const hasProcessed = img.processed_url && img.processed_url !== img.original_url;
-            document.getElementById('toggle-processed').disabled = !hasProcessed;
-            document.getElementById('toggle-both').disabled = !hasProcessed;
-            document.getElementById('download-processed-btn').disabled = !hasProcessed;
-
-            applyViewMode();
-        }
-
-        function lightboxPrev() {
-            const filtered = getFilteredImages();
-            currentLightboxIndex = (currentLightboxIndex - 1 + filtered.length) % filtered.length;
-            updateLightbox();
-        }
-
-        function lightboxNext() {
-            const filtered = getFilteredImages();
-            currentLightboxIndex = (currentLightboxIndex + 1) % filtered.length;
-            updateLightbox();
-        }
-
-        function showOriginal() {
-            lightboxViewMode = 'original';
-            updateToggleButtons();
-            applyViewMode();
-        }
-
-        function showProcessed() {
-            lightboxViewMode = 'processed';
-            updateToggleButtons();
-            applyViewMode();
-        }
-
-        function showBoth() {
-            lightboxViewMode = 'both';
-            updateToggleButtons();
-            applyViewMode();
-        }
-
-        function updateToggleButtons() {
-            document.getElementById('toggle-original').classList.toggle('active', lightboxViewMode === 'original');
-            document.getElementById('toggle-processed').classList.toggle('active', lightboxViewMode === 'processed');
-            document.getElementById('toggle-both').classList.toggle('active', lightboxViewMode === 'both');
-        }
-
-        function applyViewMode() {
-            const originalWrapper = document.getElementById('lightbox-original-wrapper');
-            const processedWrapper = document.getElementById('lightbox-processed-wrapper');
-
-            if (lightboxViewMode === 'original') {
-                originalWrapper.style.display = 'flex';
-                processedWrapper.style.display = 'none';
-            } else if (lightboxViewMode === 'processed') {
-                originalWrapper.style.display = 'none';
-                processedWrapper.style.display = 'flex';
-            } else { // both
-                originalWrapper.style.display = 'flex';
-                processedWrapper.style.display = 'flex';
-            }
-        }
-
-        // Download functions
-        function downloadOriginal() {
-            const filtered = getFilteredImages();
-            const img = filtered[currentLightboxIndex];
-            if (!img || !img.original_url) return;
-            
-            downloadImage(img.original_url, `original_${img.id}_${img.original_filename || 'image.jpg'}`);
-        }
-
-        function downloadProcessed() {
-            const filtered = getFilteredImages();
-            const img = filtered[currentLightboxIndex];
-            if (!img || !img.processed_url) return;
-            
-            const filename = img.sku 
-                ? `${img.sku}_processed_${img.id}.jpg`
-                : `processed_${img.id}_${img.original_filename || 'image.jpg'}`;
-            downloadImage(img.processed_url, filename);
-        }
-
-        async function downloadImage(url, filename) {
-            try {
-                const response = await fetch(url);
-                const blob = await response.blob();
-                const downloadUrl = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(downloadUrl);
-                showToast('Download started', 'success');
-            } catch (error) {
-                showToast('Download failed: ' + error.message, 'error');
-            }
-        }
-
-        // Keyboard navigation
-        document.addEventListener('keydown', (e) => {
-            const lightbox = document.getElementById('lightbox');
-            if (!lightbox.classList.contains('show')) return;
-
-            if (e.key === 'Escape') closeLightbox();
-            if (e.key === 'ArrowLeft') lightboxPrev();
-            if (e.key === 'ArrowRight') lightboxNext();
-            if (e.key === '1') showOriginal();
-            if (e.key === '2') showProcessed();
-            if (e.key === '3') showBoth();
+        
+        document.getElementById('lightbox').addEventListener('click', (e) => {
+            if (e.target.id === 'lightbox') closeLightbox();
         });
-
-        // Toast notification
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeLightbox();
+        });
+        
+        // Toast
         function showToast(message, type = '') {
             const toast = document.getElementById('toast');
             toast.textContent = message;
             toast.className = 'toast show ' + type;
             setTimeout(() => toast.classList.remove('show'), 3000);
         }
-
-        function formatDate(dateStr) {
-            if (!dateStr) return '-';
-            const date = new Date(dateStr);
-            return date.toLocaleString();
-        }
-
-        // Keyboard shortcut: Enter to assign
-        document.getElementById('sku-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && selectedIds.size > 0) {
-                document.getElementById('assign-btn').click();
-            }
-        });
+        
+        // Auto-refresh
+        setInterval(loadImages, 10000);
+        
+        // Init
+        loadImages();
     </script>
 </body>
 </html>
