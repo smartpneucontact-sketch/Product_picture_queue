@@ -115,7 +115,7 @@ class ImageProcessor:
     def enhance_image(self, img):
         """
         Apply enhancement to the tire image.
-        Only enhances the foreground, preserving white background.
+        Only enhances dark areas (tire rubber), preserves bright areas (labels).
         """
         has_alpha = img.mode == 'RGBA'
         
@@ -127,16 +127,30 @@ class ImageProcessor:
             rgb_img = img.convert('RGB')
             alpha_array = None
         
-        enhanced = rgb_img.copy()
+        original_array = np.array(rgb_img, dtype=np.float32)
+        enhanced_array = original_array.copy()
         
-        # 1. Shadow lifting
+        # Calculate brightness for each pixel
+        brightness = (original_array[:,:,0] * 0.299 + 
+                     original_array[:,:,1] * 0.587 + 
+                     original_array[:,:,2] * 0.114)
+        
+        # Create mask: 1.0 for dark pixels (tire), 0.0 for bright pixels (label)
+        # Pixels above threshold are protected from enhancement
+        label_threshold = 180  # Pixels brighter than this are likely label/white areas
+        blend_range = 40  # Smooth transition
+        protection_mask = np.clip((brightness - label_threshold) / blend_range, 0, 1)
+        protection_mask = np.dstack([protection_mask] * 3)
+        
+        # 1. Shadow lifting (only affects dark areas anyway)
         if self.shadow_lift > 0:
-            img_array = np.array(enhanced, dtype=np.float32)
-            shadow_mask = 1.0 - (img_array / 255.0)
+            shadow_mask = 1.0 - (enhanced_array / 255.0)
             shadow_mask = shadow_mask ** 2
             lift_amount = self.shadow_lift * shadow_mask
-            img_array = np.clip(img_array + lift_amount, 0, 255).astype(np.uint8)
-            enhanced = Image.fromarray(img_array)
+            enhanced_array = np.clip(enhanced_array + lift_amount, 0, 255)
+        
+        # Convert to PIL for brightness/contrast/sharpness
+        enhanced = Image.fromarray(enhanced_array.astype(np.uint8))
         
         # 2. Brightness
         if self.brightness_factor != 1.0:
@@ -153,14 +167,20 @@ class ImageProcessor:
             enhancer = ImageEnhance.Sharpness(enhanced)
             enhanced = enhancer.enhance(self.sharpness_factor)
         
+        # Blend: use enhanced for dark areas, original for bright areas (labels)
+        enhanced_array = np.array(enhanced, dtype=np.float32)
+        final_array = enhanced_array * (1 - protection_mask) + original_array * protection_mask
+        final_array = np.clip(final_array, 0, 255).astype(np.uint8)
+        final = Image.fromarray(final_array)
+        
         # Composite onto white background
         if has_alpha and alpha_array is not None:
-            white_bg = Image.new('RGB', enhanced.size, (255, 255, 255))
+            white_bg = Image.new('RGB', final.size, (255, 255, 255))
             alpha_mask = Image.fromarray(alpha_array)
-            result = Image.composite(enhanced, white_bg, alpha_mask)
+            result = Image.composite(final, white_bg, alpha_mask)
             return result
         
-        return enhanced
+        return final
     
     def remove_background(self, image_data, method=None):
         """
