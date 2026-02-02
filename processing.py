@@ -201,4 +201,31 @@ class ImageProcessor:
         if 'output_size' in settings:
             self.output_size = settings['output_size']
         
-        return self.process(image_data)
+        # Check if we should remove background
+        remove_bg = settings.get('remove_bg', True)
+        crop_square = settings.get('crop_square', True)
+        
+        # Step 1: Background removal (optional)
+        if remove_bg:
+            processed_data = self.remove_background(image_data)
+        else:
+            processed_data = image_data
+        
+        # Step 2: Crop to square (optional)
+        if crop_square:
+            square_img = self.crop_to_square(processed_data)
+        else:
+            img = Image.open(BytesIO(processed_data))
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+            square_img = img
+        
+        # Step 3: Enhance
+        enhanced_img = self.enhance_image(square_img)
+        
+        # Step 4: Save as high-quality JPEG
+        output = BytesIO()
+        enhanced_img.save(output, format='JPEG', quality=98, subsampling=0)
+        output.seek(0)
+        
+        return output.getvalue()

@@ -15,7 +15,7 @@
         }
         
         .container {
-            max-width: 1800px;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -25,6 +25,7 @@
             padding: 20px 0 30px;
             border-bottom: 1px solid #333;
             margin-bottom: 30px;
+            position: relative;
         }
         
         header h1 { font-size: 28px; margin-bottom: 8px; }
@@ -33,7 +34,7 @@
         .back-link {
             position: absolute;
             top: 20px;
-            left: 20px;
+            left: 0;
             color: #4CAF50;
             text-decoration: none;
             font-size: 14px;
@@ -43,7 +44,7 @@
         
         .main-layout {
             display: grid;
-            grid-template-columns: 320px 1fr;
+            grid-template-columns: 300px 1fr;
             gap: 30px;
         }
         
@@ -60,7 +61,7 @@
         .control-section { margin-bottom: 25px; }
         
         .control-section h3 {
-            font-size: 14px;
+            font-size: 13px;
             text-transform: uppercase;
             letter-spacing: 1px;
             color: #888;
@@ -69,14 +70,14 @@
             border-bottom: 1px solid #333;
         }
         
-        .control-group { margin-bottom: 18px; }
+        .control-group { margin-bottom: 15px; }
         
         .control-group label {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 13px;
-            margin-bottom: 8px;
+            font-size: 12px;
+            margin-bottom: 6px;
         }
         
         .control-group label span.value {
@@ -84,7 +85,7 @@
             background: #1a1a2e;
             padding: 2px 8px;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 11px;
         }
         
         input[type="range"] {
@@ -98,8 +99,8 @@
         
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             border-radius: 50%;
             background: #4CAF50;
             cursor: pointer;
@@ -108,26 +109,27 @@
         .checkbox-group {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 12px;
+            gap: 8px;
+            margin-bottom: 10px;
+            font-size: 12px;
         }
         
         .checkbox-group input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             accent-color: #4CAF50;
         }
         
         .btn {
             width: 100%;
-            padding: 12px 20px;
+            padding: 10px 16px;
             border: none;
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         
         .btn-primary { background: #4CAF50; color: white; }
@@ -138,8 +140,8 @@
         
         .btn-sm {
             width: auto;
-            padding: 8px 16px;
-            font-size: 12px;
+            padding: 6px 12px;
+            font-size: 11px;
         }
         
         /* Days Panel */
@@ -160,7 +162,7 @@
         
         .stats {
             display: flex;
-            gap: 20px;
+            gap: 15px;
             font-size: 13px;
             color: #888;
         }
@@ -180,7 +182,7 @@
         }
         
         .day-header {
-            padding: 15px 20px;
+            padding: 12px 16px;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
@@ -191,7 +193,7 @@
         .day-header:hover { background: #2a2a4e; }
         
         .day-header h3 {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 500;
             display: flex;
             align-items: center;
@@ -209,7 +211,7 @@
         
         .day-meta {
             display: flex;
-            gap: 15px;
+            gap: 10px;
             align-items: center;
         }
         
@@ -222,7 +224,7 @@
         
         .day-content {
             display: none;
-            padding: 0 20px 20px;
+            padding: 0 16px 16px;
         }
         
         .day-section.open .day-content {
@@ -237,11 +239,11 @@
             margin-bottom: 15px;
         }
         
-        /* Image Grid */
+        /* Image Grid - FIXED 3 COLUMNS */
         .image-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
         }
         
         .image-card {
@@ -252,13 +254,25 @@
         }
         
         .image-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
         }
         
         .image-card.processing {
-            opacity: 0.7;
+            opacity: 0.6;
             pointer-events: none;
+        }
+        
+        .image-card.processing::after {
+            content: "Processing...";
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #4CAF50;
+            font-weight: bold;
         }
         
         .image-compare {
@@ -286,45 +300,45 @@
         
         .image-compare .img-label {
             position: absolute;
-            bottom: 5px;
-            left: 5px;
+            bottom: 4px;
+            left: 4px;
             background: rgba(0,0,0,0.7);
-            padding: 2px 6px;
+            padding: 2px 5px;
             border-radius: 3px;
-            font-size: 10px;
+            font-size: 9px;
             text-transform: uppercase;
         }
         
         .image-compare .placeholder {
             color: #999;
-            font-size: 11px;
+            font-size: 10px;
         }
         
         .image-info {
-            padding: 12px;
+            padding: 10px;
         }
         
         .image-info .filename {
-            font-size: 12px;
+            font-size: 11px;
             color: #888;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         
         .image-info .sku {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             color: #4CAF50;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         
         .image-info .status {
             display: inline-block;
-            padding: 3px 8px;
+            padding: 2px 6px;
             border-radius: 4px;
-            font-size: 11px;
+            font-size: 10px;
             text-transform: uppercase;
         }
         
@@ -336,21 +350,21 @@
         
         .image-actions {
             display: flex;
-            gap: 8px;
-            margin-top: 10px;
+            gap: 6px;
+            margin-top: 8px;
         }
         
         .image-actions .btn {
             flex: 1;
             margin: 0;
-            padding: 8px;
-            font-size: 11px;
+            padding: 6px;
+            font-size: 10px;
         }
         
         /* Loading */
         .loading {
             text-align: center;
-            padding: 40px;
+            padding: 30px;
             color: #888;
         }
         
@@ -372,12 +386,13 @@
             bottom: 30px;
             right: 30px;
             background: #333;
-            padding: 15px 25px;
+            padding: 12px 20px;
             border-radius: 8px;
             transform: translateY(100px);
             opacity: 0;
             transition: all 0.3s;
             z-index: 1000;
+            font-size: 14px;
         }
         
         .toast.show { transform: translateY(0); opacity: 1; }
@@ -387,88 +402,21 @@
         /* Settings Export */
         .settings-export {
             background: #1a1a2e;
-            border-radius: 8px;
-            padding: 12px;
-            margin-top: 15px;
+            border-radius: 6px;
+            padding: 10px;
         }
         
         .settings-export pre {
-            font-size: 10px;
+            font-size: 9px;
             overflow-x: auto;
             white-space: pre-wrap;
-            max-height: 150px;
+            max-height: 120px;
             overflow-y: auto;
-        }
-        
-        /* Preview Modal */
-        .modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.9);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 20px;
-        }
-        
-        .modal.show { display: flex; }
-        
-        .modal-content {
-            background: #252540;
-            border-radius: 12px;
-            max-width: 1200px;
-            width: 100%;
-            max-height: 90vh;
-            overflow: auto;
-        }
-        
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid #333;
-        }
-        
-        .modal-close {
-            background: none;
-            border: none;
-            color: #888;
-            font-size: 24px;
-            cursor: pointer;
-        }
-        
-        .modal-body { padding: 20px; }
-        
-        .modal-compare {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        
-        .modal-compare .img-box {
-            background: #fff;
-            border-radius: 8px;
-            padding: 10px;
-            text-align: center;
-        }
-        
-        .modal-compare img {
-            max-width: 100%;
-            max-height: 60vh;
-            object-fit: contain;
-        }
-        
-        .modal-compare h4 {
-            margin-top: 10px;
-            font-size: 14px;
-            color: #333;
         }
         
         .empty-state {
             text-align: center;
-            padding: 60px 20px;
+            padding: 40px 20px;
             color: #666;
         }
         
@@ -476,15 +424,23 @@
             margin-bottom: 10px;
             color: #888;
         }
+        
+        .error-msg {
+            background: #f44336;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
-    <a href="/" class="back-link">← Back to Queue</a>
-    
     <div class="container">
         <header>
+            <a href="/" class="back-link">← Back to Queue</a>
             <h1>🔬 SmartPneu Processing Lab</h1>
-            <p>Reprocess images with different settings • Organized by day • Lazy loaded</p>
+            <p>Reprocess images with different settings • Organized by day</p>
         </header>
         
         <div class="main-layout">
@@ -518,6 +474,11 @@
                     <h3>🎭 Background Removal</h3>
                     
                     <div class="checkbox-group">
+                        <input type="checkbox" id="removeBg" checked>
+                        <label for="removeBg">Remove background</label>
+                    </div>
+                    
+                    <div class="checkbox-group">
                         <input type="checkbox" id="alphaMatting" checked>
                         <label for="alphaMatting">Alpha matting (better edges)</label>
                     </div>
@@ -529,7 +490,7 @@
                 </div>
                 
                 <div class="control-section">
-                    <h3>📐 Crop & Output</h3>
+                    <h3>📐 Output</h3>
                     
                     <div class="control-group">
                         <label>Margin % <span class="value" id="marginValue">4</span></label>
@@ -537,27 +498,27 @@
                     </div>
                     
                     <div class="control-group">
-                        <label>Output Size <span class="value" id="outputSizeValue">2048</span></label>
+                        <label>Size <span class="value" id="outputSizeValue">2048</span></label>
                         <input type="range" id="outputSize" min="512" max="4096" value="2048" step="256">
                     </div>
                 </div>
                 
                 <div class="control-section">
-                    <h3>💾 Actions</h3>
+                    <h3>💾 Save</h3>
                     <div class="checkbox-group">
                         <input type="checkbox" id="saveToCloud" checked>
                         <label for="saveToCloud">Save to Cloudinary</label>
                     </div>
-                    <button class="btn btn-secondary" id="resetBtn">↺ Reset Settings</button>
+                    <button class="btn btn-secondary" id="resetBtn">↺ Reset</button>
                 </div>
                 
                 <div class="control-section">
-                    <h3>📋 Export Settings</h3>
+                    <h3>📋 Export</h3>
                     <div class="settings-export">
                         <pre id="settingsCode"></pre>
                     </div>
-                    <button class="btn btn-secondary" id="copySettingsBtn" style="margin-top: 10px;">
-                        Copy to Clipboard
+                    <button class="btn btn-secondary" id="copySettingsBtn" style="margin-top: 8px;">
+                        Copy Settings
                     </button>
                 </div>
             </div>
@@ -572,32 +533,12 @@
                     </div>
                 </div>
                 
+                <div id="errorContainer"></div>
+                
                 <div id="daysContainer">
                     <div class="loading">
                         <div class="spinner"></div>
                         <p>Loading days...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Preview Modal -->
-    <div class="modal" id="previewModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modalTitle">Image Preview</h3>
-                <button class="modal-close" onclick="closeModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="modal-compare">
-                    <div class="img-box">
-                        <img id="modalOriginal" src="">
-                        <h4>Original</h4>
-                    </div>
-                    <div class="img-box">
-                        <img id="modalProcessed" src="">
-                        <h4>Processed</h4>
                     </div>
                 </div>
             </div>
@@ -625,6 +566,7 @@
         };
         
         const checkboxes = {
+            removeBg: document.getElementById('removeBg'),
             alphaMatting: document.getElementById('alphaMatting'),
             saveToCloud: document.getElementById('saveToCloud'),
         };
@@ -647,8 +589,10 @@
                 brightness: parseFloat(sliders.brightness.el.value),
                 contrast: parseFloat(sliders.contrast.el.value),
                 sharpness: parseFloat(sliders.sharpness.el.value),
+                remove_bg: checkboxes.removeBg.checked,
                 alpha_matting: checkboxes.alphaMatting.checked,
                 erode_size: parseInt(sliders.erodeSize.el.value),
+                crop_square: true,
                 margin_percent: parseInt(sliders.margin.el.value),
                 output_size: parseInt(sliders.outputSize.el.value),
                 save_to_cloud: checkboxes.saveToCloud.checked,
@@ -657,17 +601,13 @@
         
         function updateSettingsCode() {
             const s = getSettings();
-            document.getElementById('settingsCode').textContent = `# processing.py settings
+            document.getElementById('settingsCode').textContent = `# processing.py
 self.brightness_factor = ${s.brightness}
 self.contrast_factor = ${s.contrast}
 self.sharpness_factor = ${s.sharpness}
 self.shadow_lift = ${s.shadow_lift}
-
-# Background removal
 self.use_alpha_matting = ${s.alpha_matting ? 'True' : 'False'}
 self.erode_size = ${s.erode_size}
-
-# Crop
 self.margin_percent = ${s.margin_percent}
 self.output_size = ${s.output_size}`;
         }
@@ -676,6 +616,7 @@ self.output_size = ${s.output_size}`;
         async function loadDays() {
             try {
                 const response = await fetch('/api/lab/days');
+                if (!response.ok) throw new Error('Failed to load days');
                 const data = await response.json();
                 days = data.days;
                 
@@ -684,8 +625,12 @@ self.output_size = ${s.output_size}`;
                 
                 renderDays();
             } catch (error) {
-                showToast('Failed to load days: ' + error.message, 'error');
+                showError('Failed to load days: ' + error.message);
             }
+        }
+        
+        function showError(msg) {
+            document.getElementById('errorContainer').innerHTML = `<div class="error-msg">${msg}</div>`;
         }
         
         function renderDays() {
@@ -714,14 +659,14 @@ self.output_size = ${s.output_size}`;
                     </div>
                     <div class="day-content">
                         <div class="day-actions">
-                            <button class="btn btn-primary btn-sm" onclick="reprocessDay('${day.date}')">
+                            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); reprocessDay('${day.date}')">
                                 ⚡ Reprocess All
                             </button>
                         </div>
                         <div class="image-grid" id="grid-${day.date}">
                             <div class="loading">
                                 <div class="spinner"></div>
-                                <p>Loading images...</p>
+                                <p>Loading...</p>
                             </div>
                         </div>
                     </div>
@@ -747,6 +692,7 @@ self.output_size = ${s.output_size}`;
         async function loadDayImages(date) {
             try {
                 const response = await fetch(`/api/lab/images/day/${date}`);
+                if (!response.ok) throw new Error('Failed to load images');
                 const images = await response.json();
                 loadedDays[date] = images;
                 renderDayImages(date, images);
@@ -763,14 +709,14 @@ self.output_size = ${s.output_size}`;
                     <div class="image-compare">
                         <div class="img-wrapper">
                             <img src="${img.original_url}" alt="Original" loading="lazy">
-                            <span class="img-label">Original</span>
+                            <span class="img-label">Orig</span>
                         </div>
-                        <div class="img-wrapper">
+                        <div class="img-wrapper" id="processed-${img.id}">
                             ${img.processed_url 
                                 ? `<img src="${img.processed_url}" alt="Processed" loading="lazy">`
                                 : '<span class="placeholder">Not processed</span>'
                             }
-                            <span class="img-label">Processed</span>
+                            <span class="img-label">Proc</span>
                         </div>
                     </div>
                     <div class="image-info">
@@ -780,9 +726,6 @@ self.output_size = ${s.output_size}`;
                         <div class="image-actions">
                             <button class="btn btn-primary" onclick="reprocessImage(${img.id})">
                                 ⚡ Reprocess
-                            </button>
-                            <button class="btn btn-secondary" onclick="previewImage(${img.id})">
-                                👁 Preview
                             </button>
                         </div>
                     </div>
@@ -797,27 +740,35 @@ self.output_size = ${s.output_size}`;
             card.classList.add('processing');
             processing.add(id);
             
+            const processedDiv = document.getElementById(`processed-${id}`);
+            processedDiv.innerHTML = '<span class="placeholder">Processing...</span><span class="img-label">Proc</span>';
+            
             try {
+                const settings = getSettings();
+                console.log('Sending settings:', settings);
+                
                 const response = await fetch(`/api/lab/reprocess/${id}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(getSettings())
+                    body: JSON.stringify(settings)
                 });
                 
                 const result = await response.json();
+                console.log('Result:', result);
                 
                 if (result.success) {
-                    const processedWrapper = card.querySelectorAll('.img-wrapper')[1];
-                    processedWrapper.innerHTML = `
+                    processedDiv.innerHTML = `
                         <img src="${result.processed_url}?t=${Date.now()}" alt="Processed">
-                        <span class="img-label">Processed</span>
+                        <span class="img-label">Proc</span>
                     `;
-                    
-                    showToast(`Processed in ${result.time.toFixed(1)}s`, 'success');
+                    showToast(`Done in ${result.time.toFixed(1)}s`, 'success');
                 } else {
+                    processedDiv.innerHTML = '<span class="placeholder">Error</span><span class="img-label">Proc</span>';
                     showToast('Error: ' + result.error, 'error');
                 }
             } catch (error) {
+                console.error('Reprocess error:', error);
+                processedDiv.innerHTML = '<span class="placeholder">Error</span><span class="img-label">Proc</span>';
                 showToast('Error: ' + error.message, 'error');
             }
             
@@ -845,41 +796,25 @@ self.output_size = ${s.output_size}`;
             showToast(`Finished processing ${images.length} images`, 'success');
         }
         
-        function previewImage(id) {
-            let img = null;
-            for (const date in loadedDays) {
-                img = loadedDays[date].find(i => i.id === id);
-                if (img) break;
-            }
-            
-            if (!img) return;
-            
-            document.getElementById('modalTitle').textContent = img.sku || img.original_filename;
-            document.getElementById('modalOriginal').src = img.original_url;
-            document.getElementById('modalProcessed').src = img.processed_url || img.original_url;
-            document.getElementById('previewModal').classList.add('show');
-        }
-        
-        function closeModal() {
-            document.getElementById('previewModal').classList.remove('show');
-        }
-        
         function formatDate(dateStr) {
-            const date = new Date(dateStr);
+            const date = new Date(dateStr + 'T00:00:00');
             const today = new Date();
+            today.setHours(0,0,0,0);
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
             
-            if (dateStr === today.toISOString().split('T')[0]) {
+            const inputDate = new Date(dateStr + 'T00:00:00');
+            inputDate.setHours(0,0,0,0);
+            
+            if (inputDate.getTime() === today.getTime()) {
                 return '📅 Today';
-            } else if (dateStr === yesterday.toISOString().split('T')[0]) {
+            } else if (inputDate.getTime() === yesterday.getTime()) {
                 return '📅 Yesterday';
             }
             
             return date.toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
+                weekday: 'short', 
+                month: 'short', 
                 day: 'numeric' 
             });
         }
@@ -905,6 +840,7 @@ self.output_size = ${s.output_size}`;
                 sliders[key].value.textContent = sliders[key].el.value;
             });
             
+            checkboxes.removeBg.checked = true;
             checkboxes.alphaMatting.checked = true;
             checkboxes.saveToCloud.checked = true;
             
@@ -914,16 +850,7 @@ self.output_size = ${s.output_size}`;
         // Copy
         document.getElementById('copySettingsBtn').addEventListener('click', () => {
             navigator.clipboard.writeText(document.getElementById('settingsCode').textContent);
-            showToast('Settings copied!', 'success');
-        });
-        
-        // Modal close
-        document.getElementById('previewModal').addEventListener('click', (e) => {
-            if (e.target.id === 'previewModal') closeModal();
-        });
-        
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeModal();
+            showToast('Copied!', 'success');
         });
         
         // Init
