@@ -32,13 +32,15 @@ class ImageProcessor:
         # Crop settings
         self.margin_percent = 5
         
-        # Alpha matting settings for rembg
-        self.alpha_matting = True
+        # Alpha matting settings for rembg (disabled by default - too slow)
+        # Enable only in Lab for testing
+        self.alpha_matting = False
         self.erode_size = 10
         self.fg_threshold = 240
         self.bg_threshold = 10
         
-        # Background removal method: 'poof', 'rembg', or 'auto'
+        # Background removal method: 'poof' (fast), 'rembg', or 'auto'
+        # Use Poof API by default if key is available (fast + high quality)
         self.bg_removal_method = 'poof' if self.poof_api_key else 'rembg'
     
     def remove_background_poof(self, image_data):

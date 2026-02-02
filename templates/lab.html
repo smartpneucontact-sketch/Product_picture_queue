@@ -508,15 +508,15 @@
                     <div class="control-group" style="margin-top: 10px;">
                         <label>Method</label>
                         <select id="bgMethod" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #333;">
-                            <option value="auto">Auto (Poof → rembg)</option>
-                            <option value="poof">Poof API (best quality)</option>
-                            <option value="rembg" selected>rembg (free, local)</option>
+                            <option value="poof" selected>Poof API (fast + best quality)</option>
+                            <option value="rembg">rembg (free, local)</option>
+                            <option value="auto">Auto (Poof → rembg fallback)</option>
                         </select>
                     </div>
                     
                     <div class="checkbox-group" style="margin-top: 10px;">
-                        <input type="checkbox" id="alphaMatting" checked>
-                        <label for="alphaMatting">Alpha matting (better edges)</label>
+                        <input type="checkbox" id="alphaMatting">
+                        <label for="alphaMatting">Alpha matting (slow, rembg only)</label>
                     </div>
                     
                     <div class="control-group">
@@ -897,9 +897,9 @@ bg_method = "${s.bg_method}"`;
             });
             
             checkboxes.removeBg.checked = true;
-            checkboxes.alphaMatting.checked = true;
+            checkboxes.alphaMatting.checked = false;  // Off by default (too slow)
             checkboxes.saveToCloud.checked = true;
-            bgMethodSelect.value = 'rembg';
+            bgMethodSelect.value = 'poof';  // Poof is fast + high quality
             
             updateSettingsCode();
         });
