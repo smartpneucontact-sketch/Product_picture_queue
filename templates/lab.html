@@ -474,26 +474,58 @@
             <!-- Controls Panel -->
             <div class="controls">
                 <div class="control-section">
-                    <h3>✨ Enhancement</h3>
+                    <h3>✨ Tire Enhancement</h3>
                     
                     <div class="control-group">
-                        <label>Shadow Lift <span class="value" id="shadowLiftValue">20</span></label>
-                        <input type="range" id="shadowLift" min="0" max="50" value="20" step="1">
+                        <label>CLAHE Clip <span class="value" id="claheClipValue">2.0</span></label>
+                        <input type="range" id="claheClip" min="0" max="5" value="2.0" step="0.5">
+                        <small style="color:#666;font-size:10px;">Local contrast (0=off, higher=more detail)</small>
                     </div>
                     
                     <div class="control-group">
-                        <label>Brightness <span class="value" id="brightnessValue">1.15</span></label>
-                        <input type="range" id="brightness" min="0.5" max="2.0" value="1.15" step="0.05">
+                        <label>Shadow Lift <span class="value" id="shadowLiftValue">15</span></label>
+                        <input type="range" id="shadowLift" min="0" max="50" value="15" step="1">
                     </div>
                     
                     <div class="control-group">
-                        <label>Contrast <span class="value" id="contrastValue">1.20</span></label>
-                        <input type="range" id="contrast" min="0.5" max="2.0" value="1.20" step="0.05">
+                        <label>Brightness <span class="value" id="brightnessValue">1.05</span></label>
+                        <input type="range" id="brightness" min="0.5" max="2.0" value="1.05" step="0.05">
                     </div>
                     
                     <div class="control-group">
-                        <label>Sharpness <span class="value" id="sharpnessValue">1.10</span></label>
-                        <input type="range" id="sharpness" min="0.5" max="2.0" value="1.10" step="0.05">
+                        <label>Contrast <span class="value" id="contrastValue">1.10</span></label>
+                        <input type="range" id="contrast" min="0.5" max="2.0" value="1.10" step="0.05">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Sharpness <span class="value" id="sharpnessValue">1.15</span></label>
+                        <input type="range" id="sharpness" min="0.5" max="2.0" value="1.15" step="0.05">
+                    </div>
+                    
+                    <div class="checkbox-group" style="margin-top: 10px;">
+                        <input type="checkbox" id="colorCorrection" checked>
+                        <label for="colorCorrection">Auto white balance</label>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Denoise <span class="value" id="denoiseValue">3</span></label>
+                        <input type="range" id="denoise" min="0" max="10" value="3" step="1">
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <h3>🏷️ Label Protection</h3>
+                    
+                    <div class="control-group">
+                        <label>Threshold <span class="value" id="labelThresholdValue">200</span></label>
+                        <input type="range" id="labelThreshold" min="150" max="250" value="200" step="5">
+                        <small style="color:#666;font-size:10px;">Brightness cutoff for label detection</small>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Protection <span class="value" id="labelProtectionValue">0.85</span></label>
+                        <input type="range" id="labelProtection" min="0" max="1" value="0.85" step="0.05">
+                        <small style="color:#666;font-size:10px;">0=full enhance, 1=fully protected</small>
                     </div>
                 </div>
                 
@@ -549,6 +581,14 @@
                 </div>
                 
                 <div class="control-section">
+                    <h3>⚡ Presets</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="loadPreset('default')" style="margin-bottom: 6px;">Balanced</button>
+                    <button class="btn btn-secondary btn-sm" onclick="loadPreset('highContrast')" style="margin-bottom: 6px;">High Contrast</button>
+                    <button class="btn btn-secondary btn-sm" onclick="loadPreset('labelFocus')" style="margin-bottom: 6px;">Label Focus</button>
+                    <button class="btn btn-secondary btn-sm" onclick="loadPreset('natural')">Natural</button>
+                </div>
+                
+                <div class="control-section">
                     <h3>📋 Export</h3>
                     <div class="settings-export">
                         <pre id="settingsCode"></pre>
@@ -592,10 +632,14 @@
         
         // Sliders
         const sliders = {
+            claheClip: { el: document.getElementById('claheClip'), value: document.getElementById('claheClipValue') },
             shadowLift: { el: document.getElementById('shadowLift'), value: document.getElementById('shadowLiftValue') },
             brightness: { el: document.getElementById('brightness'), value: document.getElementById('brightnessValue') },
             contrast: { el: document.getElementById('contrast'), value: document.getElementById('contrastValue') },
             sharpness: { el: document.getElementById('sharpness'), value: document.getElementById('sharpnessValue') },
+            denoise: { el: document.getElementById('denoise'), value: document.getElementById('denoiseValue') },
+            labelThreshold: { el: document.getElementById('labelThreshold'), value: document.getElementById('labelThresholdValue') },
+            labelProtection: { el: document.getElementById('labelProtection'), value: document.getElementById('labelProtectionValue') },
             erodeSize: { el: document.getElementById('erodeSize'), value: document.getElementById('erodeSizeValue') },
             margin: { el: document.getElementById('margin'), value: document.getElementById('marginValue') },
             outputSize: { el: document.getElementById('outputSize'), value: document.getElementById('outputSizeValue') },
@@ -605,6 +649,7 @@
             removeBg: document.getElementById('removeBg'),
             alphaMatting: document.getElementById('alphaMatting'),
             saveToCloud: document.getElementById('saveToCloud'),
+            colorCorrection: document.getElementById('colorCorrection'),
         };
         
         const bgMethodSelect = document.getElementById('bgMethod');
@@ -625,14 +670,23 @@
         
         function getSettings() {
             return {
+                // Tire enhancement
+                clahe_clip: parseFloat(sliders.claheClip.el.value),
                 shadow_lift: parseInt(sliders.shadowLift.el.value),
                 brightness: parseFloat(sliders.brightness.el.value),
                 contrast: parseFloat(sliders.contrast.el.value),
                 sharpness: parseFloat(sliders.sharpness.el.value),
+                color_correction: checkboxes.colorCorrection.checked,
+                denoise: parseInt(sliders.denoise.el.value),
+                // Label protection
+                label_threshold: parseInt(sliders.labelThreshold.el.value),
+                label_protection: parseFloat(sliders.labelProtection.el.value),
+                // Background removal
                 remove_bg: checkboxes.removeBg.checked,
                 bg_method: bgMethodSelect.value,
                 alpha_matting: checkboxes.alphaMatting.checked,
                 erode_size: parseInt(sliders.erodeSize.el.value),
+                // Output
                 margin_percent: parseInt(sliders.margin.el.value),
                 output_size: parseInt(sliders.outputSize.el.value),
                 save_to_cloud: checkboxes.saveToCloud.checked,
@@ -641,18 +695,28 @@
         
         function updateSettingsCode() {
             const s = getSettings();
-            document.getElementById('settingsCode').textContent = `# processing.py
-self.brightness_factor = ${s.brightness}
-self.contrast_factor = ${s.contrast}
-self.sharpness_factor = ${s.sharpness}
+            document.getElementById('settingsCode').textContent = `# processing_v2.py settings
+# Tire enhancement
+self.tire_clahe_clip = ${s.clahe_clip}
 self.shadow_lift = ${s.shadow_lift}
-self.margin_percent = ${s.margin_percent}
-self.output_size = ${s.output_size}
+self.tire_brightness = ${s.brightness}
+self.tire_contrast = ${s.contrast}
+self.sharpness_factor = ${s.sharpness}
+self.color_correction = ${s.color_correction ? 'True' : 'False'}
+self.denoise_strength = ${s.denoise}
+
+# Label protection
+self.label_threshold = ${s.label_threshold}
+self.label_protection = ${s.label_protection}
 
 # Background removal
-alpha_matting = ${s.alpha_matting}
+bg_method = "${s.bg_method}"
+alpha_matting = ${s.alpha_matting ? 'True' : 'False'}
 erode_size = ${s.erode_size}
-bg_method = "${s.bg_method}"`;
+
+# Output
+margin_percent = ${s.margin_percent}
+output_size = ${s.output_size}`;
         }
         
         // Load days
@@ -883,11 +947,15 @@ bg_method = "${s.bg_method}"`;
         
         // Reset
         document.getElementById('resetBtn').addEventListener('click', () => {
-            // Lab2 defaults
-            sliders.shadowLift.el.value = 20;
-            sliders.brightness.el.value = 1.15;
-            sliders.contrast.el.value = 1.20;
-            sliders.sharpness.el.value = 1.10;
+            // V2 defaults
+            sliders.claheClip.el.value = 2.0;
+            sliders.shadowLift.el.value = 15;
+            sliders.brightness.el.value = 1.05;
+            sliders.contrast.el.value = 1.10;
+            sliders.sharpness.el.value = 1.15;
+            sliders.denoise.el.value = 3;
+            sliders.labelThreshold.el.value = 200;
+            sliders.labelProtection.el.value = 0.85;
             sliders.erodeSize.el.value = 10;
             sliders.margin.el.value = 5;
             sliders.outputSize.el.value = 2048;
@@ -897,9 +965,10 @@ bg_method = "${s.bg_method}"`;
             });
             
             checkboxes.removeBg.checked = true;
-            checkboxes.alphaMatting.checked = false;  // Off by default (too slow)
+            checkboxes.alphaMatting.checked = false;
             checkboxes.saveToCloud.checked = true;
-            bgMethodSelect.value = 'poof';  // Poof is fast + high quality
+            checkboxes.colorCorrection.checked = true;
+            bgMethodSelect.value = 'poof';
             
             updateSettingsCode();
         });
@@ -913,6 +982,52 @@ bg_method = "${s.bg_method}"`;
         // Init
         updateSettingsCode();
         loadDays();
+        
+        // Presets
+        function loadPreset(name) {
+            const presets = {
+                default: {
+                    claheClip: 2.0, shadowLift: 15, brightness: 1.05, contrast: 1.10,
+                    sharpness: 1.15, denoise: 3, labelThreshold: 200, labelProtection: 0.85,
+                    colorCorrection: true
+                },
+                highContrast: {
+                    claheClip: 3.0, shadowLift: 25, brightness: 1.08, contrast: 1.20,
+                    sharpness: 1.25, denoise: 2, labelThreshold: 200, labelProtection: 0.90,
+                    colorCorrection: true
+                },
+                labelFocus: {
+                    claheClip: 1.5, shadowLift: 10, brightness: 1.02, contrast: 1.05,
+                    sharpness: 1.10, denoise: 3, labelThreshold: 180, labelProtection: 0.95,
+                    colorCorrection: true
+                },
+                natural: {
+                    claheClip: 1.0, shadowLift: 10, brightness: 1.0, contrast: 1.05,
+                    sharpness: 1.05, denoise: 2, labelThreshold: 200, labelProtection: 0.80,
+                    colorCorrection: false
+                }
+            };
+            
+            const p = presets[name];
+            if (!p) return;
+            
+            sliders.claheClip.el.value = p.claheClip;
+            sliders.shadowLift.el.value = p.shadowLift;
+            sliders.brightness.el.value = p.brightness;
+            sliders.contrast.el.value = p.contrast;
+            sliders.sharpness.el.value = p.sharpness;
+            sliders.denoise.el.value = p.denoise;
+            sliders.labelThreshold.el.value = p.labelThreshold;
+            sliders.labelProtection.el.value = p.labelProtection;
+            checkboxes.colorCorrection.checked = p.colorCorrection;
+            
+            Object.keys(sliders).forEach(key => {
+                sliders[key].value.textContent = sliders[key].el.value;
+            });
+            
+            updateSettingsCode();
+            showToast(`Loaded "${name}" preset`, 'success');
+        }
     </script>
 </body>
 </html>

@@ -1,0 +1,482 @@
+"""
+SmartPneu Image Processing v2
+Advanced tire image processing with intelligent label protection and tread enhancement.
+
+Key improvements over v1:
+- CLAHE (Contrast Limited Adaptive Histogram Equalization) for local contrast
+- Intelligent label detection using edge density analysis
+- Separate processing pipelines for tire rubber vs label areas
+- Better shadow recovery with tone mapping
+- Optional color correction for accurate tire appearance
+"""
+
+import requests
+from PIL import Image, ImageEnhance, ImageFilter
+from io import BytesIO
+import numpy as np
+import os
+import logging
+import cv2
+
+logger = logging.getLogger(__name__)
+
+# Lazy load rembg
+_rembg_remove = None
+
+def get_rembg():
+    global _rembg_remove
+    if _rembg_remove is None:
+        from rembg import remove
+        _rembg_remove = remove
+    return _rembg_remove
+
+
+class ImageProcessorV2:
+    """Advanced tire image processor with intelligent region-based enhancement."""
+    
+    def __init__(self, poof_api_key=None, output_size=2048):
+        self.output_size = output_size
+        self.poof_api_key = poof_api_key or os.environ.get('POOF_API_KEY')
+        
+        # ===== ENHANCEMENT PRESETS =====
+        # Tire rubber enhancement (applied to dark tire areas)
+        self.tire_clahe_clip = 2.0       # CLAHE clip limit (higher = more contrast)
+        self.tire_clahe_grid = 8         # CLAHE grid size
+        self.tire_brightness = 1.05      # Subtle brightening for tire
+        self.tire_contrast = 1.10        # Local contrast boost
+        self.shadow_lift = 15            # Lift deep shadows (0-50)
+        
+        # Label protection (bright text areas)
+        self.label_threshold = 200       # Brightness threshold for label detection
+        self.label_edge_threshold = 50   # Edge density threshold for text areas
+        self.label_protection = 0.85     # How much to protect labels (0-1)
+        
+        # Global adjustments (applied to whole image)
+        self.sharpness_factor = 1.15     # Overall sharpening
+        self.color_correction = True     # Auto white balance
+        self.denoise_strength = 3        # Noise reduction (0 = off)
+        
+        # Crop settings
+        self.margin_percent = 5
+        
+        # Background removal
+        self.bg_removal_method = 'poof' if self.poof_api_key else 'rembg'
+        self.alpha_matting = False
+        self.erode_size = 10
+        self.fg_threshold = 240
+        self.bg_threshold = 10
+    
+    # ==================== BACKGROUND REMOVAL ====================
+    
+    def remove_background_poof(self, image_data):
+        """Remove background using Poof API."""
+        if not self.poof_api_key:
+            raise ValueError("Poof API key not configured")
+        
+        logger.info("Removing background using Poof API...")
+        url = "https://api.poof.bg/v1/remove-background"
+        headers = {"X-Api-Key": self.poof_api_key}
+        files = {'image_file': ('image.jpg', image_data, 'image/jpeg')}
+        
+        try:
+            response = requests.post(url, headers=headers, files=files, timeout=60)
+            if response.status_code == 200:
+                logger.info(f"Poof API success - {len(response.content)} bytes")
+                return response.content
+            else:
+                logger.error(f"Poof API error: {response.status_code}")
+                raise Exception(f"Poof API error: {response.status_code}")
+        except requests.exceptions.Timeout:
+            raise Exception("Poof API timeout")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Poof API error: {e}")
+    
+    def remove_background_rembg(self, image_data):
+        """Remove background using rembg."""
+        logger.info("Removing background using rembg...")
+        input_image = Image.open(BytesIO(image_data))
+        remove = get_rembg()
+        
+        if self.alpha_matting:
+            from rembg import new_session
+            session = new_session("u2net")
+            output_image = remove(
+                input_image, session=session,
+                alpha_matting=True,
+                alpha_matting_foreground_threshold=self.fg_threshold,
+                alpha_matting_background_threshold=self.bg_threshold,
+                alpha_matting_erode_size=self.erode_size,
+            )
+        else:
+            output_image = remove(input_image)
+        
+        output_buffer = BytesIO()
+        output_image.save(output_buffer, format='PNG')
+        output_buffer.seek(0)
+        return output_buffer.getvalue()
+    
+    def remove_background(self, image_data, method=None):
+        """Remove background with fallback."""
+        method = method or self.bg_removal_method
+        
+        if method in ['poof', 'auto'] and self.poof_api_key:
+            try:
+                return self.remove_background_poof(image_data)
+            except Exception as e:
+                logger.warning(f"Poof failed, falling back to rembg: {e}")
+                return self.remove_background_rembg(image_data)
+        return self.remove_background_rembg(image_data)
+    
+    # ==================== LABEL DETECTION ====================
+    
+    def detect_label_regions(self, img_array):
+        """
+        Detect label/text regions using brightness + edge density analysis.
+        Returns a mask where 1.0 = label area (protect), 0.0 = tire area (enhance).
+        """
+        # Convert to grayscale if needed
+        if len(img_array.shape) == 3:
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img_array
+        
+        # 1. Brightness-based detection (white/light areas)
+        brightness_mask = gray.astype(np.float32) / 255.0
+        bright_areas = np.clip((brightness_mask - (self.label_threshold/255)) * 4, 0, 1)
+        
+        # 2. Edge density detection (text has high edge density)
+        edges = cv2.Canny(gray, 50, 150)
+        # Dilate edges to connect text characters
+        kernel = np.ones((5, 5), np.uint8)
+        edges_dilated = cv2.dilate(edges, kernel, iterations=2)
+        # Blur to create density map
+        edge_density = cv2.GaussianBlur(edges_dilated.astype(np.float32), (21, 21), 0)
+        edge_density = edge_density / 255.0
+        
+        # 3. Combine: areas that are BOTH bright AND have text-like edges
+        # Or areas that are very bright (pure white labels)
+        label_mask = np.maximum(
+            bright_areas * 0.7 + edge_density * 0.3,  # Weighted combination
+            np.where(brightness_mask > 0.9, 1.0, 0.0)  # Pure white always protected
+        )
+        
+        # 4. Smooth the mask edges
+        label_mask = cv2.GaussianBlur(label_mask.astype(np.float32), (15, 15), 0)
+        label_mask = np.clip(label_mask, 0, 1)
+        
+        return label_mask
+    
+    # ==================== ENHANCEMENT ====================
+    
+    def apply_clahe(self, img_array, clip_limit=2.0, grid_size=8):
+        """
+        Apply CLAHE (Contrast Limited Adaptive Histogram Equalization).
+        This enhances local contrast without blowing out bright areas.
+        """
+        # Convert to LAB color space
+        lab = cv2.cvtColor(img_array, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # Apply CLAHE to L channel only
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(grid_size, grid_size))
+        l_enhanced = clahe.apply(l)
+        
+        # Merge back
+        lab_enhanced = cv2.merge([l_enhanced, a, b])
+        rgb_enhanced = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2RGB)
+        
+        return rgb_enhanced
+    
+    def lift_shadows(self, img_array, amount=20):
+        """
+        Lift shadows while preserving highlights.
+        Uses a tone curve that affects only dark areas.
+        """
+        img_float = img_array.astype(np.float32) / 255.0
+        
+        # Shadow mask: 1.0 for black, 0.0 for white
+        luminance = 0.299 * img_float[:,:,0] + 0.587 * img_float[:,:,1] + 0.114 * img_float[:,:,2]
+        shadow_mask = (1.0 - luminance) ** 2  # Squared for more aggressive dark targeting
+        
+        # Apply lift
+        lift = (amount / 255.0) * shadow_mask
+        lift = np.dstack([lift, lift, lift])
+        
+        result = np.clip(img_float + lift, 0, 1)
+        return (result * 255).astype(np.uint8)
+    
+    def auto_white_balance(self, img_array):
+        """
+        Simple gray-world white balance correction.
+        Ensures tire colors look natural, not too yellow/blue.
+        """
+        result = img_array.astype(np.float32)
+        
+        # Calculate average for each channel
+        avg_r = np.mean(result[:,:,0])
+        avg_g = np.mean(result[:,:,1])
+        avg_b = np.mean(result[:,:,2])
+        avg_gray = (avg_r + avg_g + avg_b) / 3
+        
+        # Scale each channel
+        if avg_r > 0:
+            result[:,:,0] = np.clip(result[:,:,0] * (avg_gray / avg_r), 0, 255)
+        if avg_g > 0:
+            result[:,:,1] = np.clip(result[:,:,1] * (avg_gray / avg_g), 0, 255)
+        if avg_b > 0:
+            result[:,:,2] = np.clip(result[:,:,2] * (avg_gray / avg_b), 0, 255)
+        
+        return result.astype(np.uint8)
+    
+    def denoise(self, img_array, strength=3):
+        """Apply non-local means denoising."""
+        if strength <= 0:
+            return img_array
+        return cv2.fastNlMeansDenoisingColored(img_array, None, strength, strength, 7, 21)
+    
+    def enhance_image(self, img):
+        """
+        Advanced tire image enhancement with intelligent label protection.
+        
+        Pipeline:
+        1. Detect label regions
+        2. Apply CLAHE for local contrast (tread detail)
+        3. Lift shadows
+        4. Color correction
+        5. Denoise
+        6. Sharpen
+        7. Blend: enhanced tire + protected labels
+        """
+        has_alpha = img.mode == 'RGBA'
+        
+        # Separate alpha channel
+        if has_alpha:
+            r, g, b, a = img.split()
+            rgb_img = Image.merge('RGB', (r, g, b))
+            alpha_array = np.array(a)
+        else:
+            rgb_img = img.convert('RGB')
+            alpha_array = None
+        
+        original_array = np.array(rgb_img, dtype=np.uint8)
+        
+        # Step 1: Detect label regions
+        label_mask = self.detect_label_regions(original_array)
+        tire_mask = 1.0 - label_mask
+        
+        logger.debug(f"Label coverage: {np.mean(label_mask)*100:.1f}%")
+        
+        # Step 2: Create enhanced version for tire areas
+        enhanced = original_array.copy()
+        
+        # 2a. CLAHE for local contrast
+        if self.tire_clahe_clip > 0:
+            enhanced = self.apply_clahe(enhanced, self.tire_clahe_clip, self.tire_clahe_grid)
+        
+        # 2b. Shadow lifting
+        if self.shadow_lift > 0:
+            enhanced = self.lift_shadows(enhanced, self.shadow_lift)
+        
+        # 2c. Color correction
+        if self.color_correction:
+            enhanced = self.auto_white_balance(enhanced)
+        
+        # 2d. Denoise
+        if self.denoise_strength > 0:
+            enhanced = self.denoise(enhanced, self.denoise_strength)
+        
+        # 2e. Brightness/contrast adjustment
+        if self.tire_brightness != 1.0 or self.tire_contrast != 1.0:
+            enhanced_pil = Image.fromarray(enhanced)
+            if self.tire_brightness != 1.0:
+                enhanced_pil = ImageEnhance.Brightness(enhanced_pil).enhance(self.tire_brightness)
+            if self.tire_contrast != 1.0:
+                enhanced_pil = ImageEnhance.Contrast(enhanced_pil).enhance(self.tire_contrast)
+            enhanced = np.array(enhanced_pil)
+        
+        # Step 3: Blend enhanced tire with protected labels
+        # Expand masks to 3 channels
+        tire_mask_3ch = np.dstack([tire_mask, tire_mask, tire_mask])
+        label_mask_3ch = np.dstack([label_mask, label_mask, label_mask])
+        
+        # Weighted blend
+        protection = self.label_protection
+        blended = (
+            enhanced.astype(np.float32) * tire_mask_3ch +  # Full enhancement on tire
+            enhanced.astype(np.float32) * label_mask_3ch * (1 - protection) +  # Partial on labels
+            original_array.astype(np.float32) * label_mask_3ch * protection  # Protected original
+        )
+        blended = np.clip(blended, 0, 255).astype(np.uint8)
+        
+        # Step 4: Global sharpening
+        if self.sharpness_factor != 1.0:
+            final_pil = Image.fromarray(blended)
+            final_pil = ImageEnhance.Sharpness(final_pil).enhance(self.sharpness_factor)
+            blended = np.array(final_pil)
+        
+        final = Image.fromarray(blended)
+        
+        # Composite onto white background
+        if has_alpha and alpha_array is not None:
+            white_bg = Image.new('RGB', final.size, (255, 255, 255))
+            alpha_mask = Image.fromarray(alpha_array)
+            result = Image.composite(final, white_bg, alpha_mask)
+            return result
+        
+        return final
+    
+    # ==================== CROPPING ====================
+    
+    def crop_to_square(self, image_data):
+        """Crop to 1:1 with subject centered and margin."""
+        if isinstance(image_data, bytes):
+            img = Image.open(BytesIO(image_data))
+        else:
+            img = image_data
+        
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        bbox = img.getbbox()
+        if bbox is None:
+            raise Exception("No content found in image")
+        
+        img_cropped = img.crop(bbox)
+        width, height = img_cropped.size
+        
+        max_dim = max(width, height)
+        margin = int(max_dim * (self.margin_percent / 100))
+        square_size = max_dim + (margin * 2)
+        
+        square_img = Image.new('RGBA', (square_size, square_size), (255, 255, 255, 0))
+        x_offset = (square_size - width) // 2
+        y_offset = (square_size - height) // 2
+        square_img.paste(img_cropped, (x_offset, y_offset), img_cropped)
+        
+        if square_size > self.output_size:
+            square_img = square_img.resize((self.output_size, self.output_size), Image.Resampling.LANCZOS)
+        
+        return square_img
+    
+    # ==================== MAIN PIPELINE ====================
+    
+    def process(self, image_data, bg_method=None):
+        """Full processing pipeline."""
+        # Step 1: Remove background
+        no_bg_image = self.remove_background(image_data, method=bg_method)
+        
+        # Step 2: Crop to square
+        square_img = self.crop_to_square(no_bg_image)
+        
+        # Step 3: Enhance
+        enhanced_img = self.enhance_image(square_img)
+        
+        # Step 4: Save as high-quality JPEG
+        output = BytesIO()
+        enhanced_img.save(output, format='JPEG', quality=98, subsampling=0)
+        output.seek(0)
+        
+        return output.getvalue()
+    
+    def process_with_settings(self, image_data, settings):
+        """Process with custom settings (for lab testing)."""
+        # Apply all settings
+        self.tire_clahe_clip = settings.get('clahe_clip', 2.0)
+        self.tire_clahe_grid = settings.get('clahe_grid', 8)
+        self.tire_brightness = settings.get('brightness', 1.05)
+        self.tire_contrast = settings.get('contrast', 1.10)
+        self.shadow_lift = settings.get('shadow_lift', 15)
+        
+        self.label_threshold = settings.get('label_threshold', 200)
+        self.label_protection = settings.get('label_protection', 0.85)
+        
+        self.sharpness_factor = settings.get('sharpness', 1.15)
+        self.color_correction = settings.get('color_correction', True)
+        self.denoise_strength = settings.get('denoise', 3)
+        
+        self.margin_percent = settings.get('margin_percent', 5)
+        self.output_size = settings.get('output_size', 2048)
+        
+        # Background removal settings
+        self.alpha_matting = settings.get('alpha_matting', False)
+        self.erode_size = settings.get('erode_size', 10)
+        self.fg_threshold = settings.get('fg_threshold', 240)
+        self.bg_threshold = settings.get('bg_threshold', 10)
+        
+        remove_bg = settings.get('remove_bg', True)
+        bg_method = settings.get('bg_method', 'auto')
+        
+        # Process
+        if remove_bg:
+            no_bg_data = self.remove_background(image_data, method=bg_method)
+            img = Image.open(BytesIO(no_bg_data))
+        else:
+            img = Image.open(BytesIO(image_data))
+        
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        square_img = self.crop_to_square(img)
+        enhanced_img = self.enhance_image(square_img)
+        
+        output = BytesIO()
+        enhanced_img.save(output, format='JPEG', quality=98, subsampling=0)
+        output.seek(0)
+        
+        return output.getvalue()
+    
+    # ==================== PRESETS ====================
+    
+    @classmethod
+    def preset_default(cls, poof_api_key=None):
+        """Balanced preset for most tires."""
+        p = cls(poof_api_key=poof_api_key)
+        p.tire_clahe_clip = 2.0
+        p.tire_brightness = 1.05
+        p.tire_contrast = 1.10
+        p.shadow_lift = 15
+        p.label_protection = 0.85
+        p.sharpness_factor = 1.15
+        return p
+    
+    @classmethod
+    def preset_high_contrast(cls, poof_api_key=None):
+        """For tires with deep tread patterns - more aggressive contrast."""
+        p = cls(poof_api_key=poof_api_key)
+        p.tire_clahe_clip = 3.0
+        p.tire_brightness = 1.08
+        p.tire_contrast = 1.20
+        p.shadow_lift = 25
+        p.label_protection = 0.90
+        p.sharpness_factor = 1.25
+        return p
+    
+    @classmethod
+    def preset_label_focus(cls, poof_api_key=None):
+        """For tires where label readability is critical."""
+        p = cls(poof_api_key=poof_api_key)
+        p.tire_clahe_clip = 1.5
+        p.tire_brightness = 1.02
+        p.tire_contrast = 1.05
+        p.shadow_lift = 10
+        p.label_protection = 0.95
+        p.label_threshold = 180
+        p.sharpness_factor = 1.10
+        return p
+    
+    @classmethod 
+    def preset_natural(cls, poof_api_key=None):
+        """Minimal enhancement - preserves original appearance."""
+        p = cls(poof_api_key=poof_api_key)
+        p.tire_clahe_clip = 1.0
+        p.tire_brightness = 1.0
+        p.tire_contrast = 1.05
+        p.shadow_lift = 10
+        p.label_protection = 0.80
+        p.sharpness_factor = 1.05
+        p.color_correction = False
+        return p
+
+
+# Backwards compatibility - alias to original class name
+ImageProcessor = ImageProcessorV2
