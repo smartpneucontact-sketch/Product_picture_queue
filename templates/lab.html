@@ -558,6 +558,38 @@
                 </div>
                 
                 <div class="control-section">
+                    <h3>✂️ Edge Refinement</h3>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="edgeRefinement" checked>
+                        <label for="edgeRefinement">Enable edge smoothing</label>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Edge Erode <span class="value" id="edgeErodeValue">1</span></label>
+                        <input type="range" id="edgeErode" min="0" max="5" value="1" step="1">
+                        <small style="color:#666;font-size:10px;">Remove color fringe at edges</small>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Edge Smooth <span class="value" id="edgeSmoothValue">3</span></label>
+                        <input type="range" id="edgeSmooth" min="0" max="10" value="3" step="1">
+                        <small style="color:#666;font-size:10px;">Gaussian blur on mask edges</small>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Feather <span class="value" id="edgeFeatherValue">2</span></label>
+                        <input type="range" id="edgeFeather" min="0" max="5" value="2" step="1">
+                        <small style="color:#666;font-size:10px;">Gradual transparency at edges</small>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="antiAlias" checked>
+                        <label for="antiAlias">Anti-alias</label>
+                    </div>
+                </div>
+                
+                <div class="control-section">
                     <h3>📐 Output</h3>
                     
                     <div class="control-group">
@@ -641,6 +673,9 @@
             labelThreshold: { el: document.getElementById('labelThreshold'), value: document.getElementById('labelThresholdValue') },
             labelProtection: { el: document.getElementById('labelProtection'), value: document.getElementById('labelProtectionValue') },
             erodeSize: { el: document.getElementById('erodeSize'), value: document.getElementById('erodeSizeValue') },
+            edgeErode: { el: document.getElementById('edgeErode'), value: document.getElementById('edgeErodeValue') },
+            edgeSmooth: { el: document.getElementById('edgeSmooth'), value: document.getElementById('edgeSmoothValue') },
+            edgeFeather: { el: document.getElementById('edgeFeather'), value: document.getElementById('edgeFeatherValue') },
             margin: { el: document.getElementById('margin'), value: document.getElementById('marginValue') },
             outputSize: { el: document.getElementById('outputSize'), value: document.getElementById('outputSizeValue') },
         };
@@ -650,6 +685,8 @@
             alphaMatting: document.getElementById('alphaMatting'),
             saveToCloud: document.getElementById('saveToCloud'),
             colorCorrection: document.getElementById('colorCorrection'),
+            edgeRefinement: document.getElementById('edgeRefinement'),
+            antiAlias: document.getElementById('antiAlias'),
         };
         
         const bgMethodSelect = document.getElementById('bgMethod');
@@ -686,6 +723,12 @@
                 bg_method: bgMethodSelect.value,
                 alpha_matting: checkboxes.alphaMatting.checked,
                 erode_size: parseInt(sliders.erodeSize.el.value),
+                // Edge refinement
+                edge_refinement: checkboxes.edgeRefinement.checked,
+                edge_erode: parseInt(sliders.edgeErode.el.value),
+                edge_smooth: parseInt(sliders.edgeSmooth.el.value),
+                edge_feather: parseInt(sliders.edgeFeather.el.value),
+                anti_alias: checkboxes.antiAlias.checked,
                 // Output
                 margin_percent: parseInt(sliders.margin.el.value),
                 output_size: parseInt(sliders.outputSize.el.value),
@@ -709,10 +752,12 @@ self.denoise_strength = ${s.denoise}
 self.label_threshold = ${s.label_threshold}
 self.label_protection = ${s.label_protection}
 
-# Background removal
-bg_method = "${s.bg_method}"
-alpha_matting = ${s.alpha_matting ? 'True' : 'False'}
-erode_size = ${s.erode_size}
+# Edge refinement
+self.edge_refinement = ${s.edge_refinement ? 'True' : 'False'}
+self.edge_erode = ${s.edge_erode}
+self.edge_smooth = ${s.edge_smooth}
+self.edge_feather = ${s.edge_feather}
+self.anti_alias = ${s.anti_alias ? 'True' : 'False'}
 
 # Output
 margin_percent = ${s.margin_percent}
@@ -957,6 +1002,9 @@ output_size = ${s.output_size}`;
             sliders.labelThreshold.el.value = 200;
             sliders.labelProtection.el.value = 0.85;
             sliders.erodeSize.el.value = 10;
+            sliders.edgeErode.el.value = 1;
+            sliders.edgeSmooth.el.value = 3;
+            sliders.edgeFeather.el.value = 2;
             sliders.margin.el.value = 5;
             sliders.outputSize.el.value = 2048;
             
@@ -968,6 +1016,8 @@ output_size = ${s.output_size}`;
             checkboxes.alphaMatting.checked = false;
             checkboxes.saveToCloud.checked = true;
             checkboxes.colorCorrection.checked = true;
+            checkboxes.edgeRefinement.checked = true;
+            checkboxes.antiAlias.checked = true;
             bgMethodSelect.value = 'poof';
             
             updateSettingsCode();

@@ -65,6 +65,13 @@ class ImageProcessorV2:
         self.erode_size = 10
         self.fg_threshold = 240
         self.bg_threshold = 10
+        
+        # Edge refinement settings (NEW)
+        self.edge_refinement = True      # Enable edge smoothing
+        self.edge_feather = 2            # Feather radius in pixels (1-5)
+        self.edge_smooth = 3             # Gaussian blur on mask edges
+        self.edge_erode = 1              # Erode mask to remove fringe (0-3)
+        self.anti_alias = True           # Anti-alias the final edges
     
     # ==================== BACKGROUND REMOVAL ====================
     
@@ -126,6 +133,98 @@ class ImageProcessorV2:
                 logger.warning(f"Poof failed, falling back to rembg: {e}")
                 return self.remove_background_rembg(image_data)
         return self.remove_background_rembg(image_data)
+    
+    # ==================== EDGE REFINEMENT ====================
+    
+    def refine_edges(self, img):
+        """
+        Refine the edges of a transparent PNG to remove jagged edges and fringing.
+        
+        Techniques:
+        1. Erode the alpha mask slightly to remove color fringe
+        2. Smooth the alpha mask edges with Gaussian blur
+        3. Apply feathering for gradual transparency at edges
+        4. Anti-alias by super-sampling edges
+        """
+        if img.mode != 'RGBA':
+            return img
+        
+        if not self.edge_refinement:
+            return img
+        
+        # Split into RGB and Alpha
+        r, g, b, a = img.split()
+        alpha = np.array(a, dtype=np.uint8)
+        rgb = np.array(img.convert('RGB'))
+        
+        original_alpha = alpha.copy()
+        
+        # Step 1: Erode to remove color fringe (pixels at the very edge often have wrong colors)
+        if self.edge_erode > 0:
+            kernel = np.ones((3, 3), np.uint8)
+            alpha = cv2.erode(alpha, kernel, iterations=self.edge_erode)
+        
+        # Step 2: Find edge region (where alpha transitions from 0 to 255)
+        # Dilate and erode to find the edge band
+        kernel = np.ones((5, 5), np.uint8)
+        dilated = cv2.dilate(alpha, kernel, iterations=2)
+        eroded = cv2.erode(alpha, kernel, iterations=2)
+        edge_band = dilated - eroded  # This is the edge region
+        
+        # Step 3: Smooth only the edge region
+        if self.edge_smooth > 0:
+            # Apply Gaussian blur to the alpha
+            blur_size = self.edge_smooth * 2 + 1  # Must be odd
+            alpha_smooth = cv2.GaussianBlur(alpha.astype(np.float32), (blur_size, blur_size), 0)
+            
+            # Blend: use smoothed alpha in edge regions, original elsewhere
+            edge_mask = (edge_band > 0).astype(np.float32)
+            edge_mask = cv2.GaussianBlur(edge_mask, (blur_size, blur_size), 0)
+            
+            alpha = (alpha_smooth * edge_mask + alpha.astype(np.float32) * (1 - edge_mask))
+            alpha = np.clip(alpha, 0, 255).astype(np.uint8)
+        
+        # Step 4: Feathering - gradual falloff at edges
+        if self.edge_feather > 0:
+            # Distance transform from the edge
+            binary_mask = (alpha > 127).astype(np.uint8) * 255
+            dist_inside = cv2.distanceTransform(binary_mask, cv2.DIST_L2, 5)
+            dist_outside = cv2.distanceTransform(255 - binary_mask, cv2.DIST_L2, 5)
+            
+            # Create feathered alpha based on distance
+            feather_px = self.edge_feather
+            feather_alpha = np.clip(dist_inside / feather_px, 0, 1)
+            
+            # Apply feathering only where original alpha was transitioning
+            edge_region = (alpha > 10) & (alpha < 245)
+            alpha_float = alpha.astype(np.float32) / 255.0
+            alpha_float = np.where(edge_region, feather_alpha, alpha_float)
+            alpha = (alpha_float * 255).astype(np.uint8)
+        
+        # Step 5: Anti-aliasing - ensure smooth gradients at edges
+        if self.anti_alias:
+            # Apply slight bilateral filter to smooth while preserving edges
+            alpha = cv2.bilateralFilter(alpha, 5, 50, 50)
+        
+        # Step 6: Clean up any semi-transparent noise in fully opaque areas
+        # Pixels that were fully opaque should stay fully opaque (except at edges)
+        fully_opaque = original_alpha == 255
+        fully_transparent = original_alpha == 0
+        
+        # Restore full opacity to core areas (not near edges)
+        core_opaque = cv2.erode(fully_opaque.astype(np.uint8) * 255, kernel, iterations=3)
+        alpha = np.where(core_opaque > 0, 255, alpha)
+        
+        # Restore full transparency to areas that were background
+        core_transparent = cv2.erode(fully_transparent.astype(np.uint8) * 255, kernel, iterations=3)
+        alpha = np.where(core_transparent > 0, 0, alpha)
+        
+        # Reconstruct the image
+        result = Image.merge('RGBA', (r, g, b, Image.fromarray(alpha)))
+        
+        logger.debug(f"Edge refinement complete: erode={self.edge_erode}, smooth={self.edge_smooth}, feather={self.edge_feather}")
+        
+        return result
     
     # ==================== LABEL DETECTION ====================
     
@@ -337,6 +436,10 @@ class ImageProcessorV2:
         if img.mode != 'RGBA':
             img = img.convert('RGBA')
         
+        # Apply edge refinement if enabled
+        if self.edge_refinement:
+            img = self.refine_edges(img)
+        
         bbox = img.getbbox()
         if bbox is None:
             raise Exception("No content found in image")
@@ -402,6 +505,13 @@ class ImageProcessorV2:
         self.erode_size = settings.get('erode_size', 10)
         self.fg_threshold = settings.get('fg_threshold', 240)
         self.bg_threshold = settings.get('bg_threshold', 10)
+        
+        # Edge refinement settings
+        self.edge_refinement = settings.get('edge_refinement', True)
+        self.edge_feather = settings.get('edge_feather', 2)
+        self.edge_smooth = settings.get('edge_smooth', 3)
+        self.edge_erode = settings.get('edge_erode', 1)
+        self.anti_alias = settings.get('anti_alias', True)
         
         remove_bg = settings.get('remove_bg', True)
         bg_method = settings.get('bg_method', 'auto')
