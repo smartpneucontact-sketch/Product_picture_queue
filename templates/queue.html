@@ -682,11 +682,12 @@
                             <a href="${img.processed_url || '#'}" download target="_blank" 
                                class="${img.processed_url ? '' : 'disabled'}">⬇ Processed</a>
                         </div>
-                        ${img.status === 'failed' ? `
-                            <div class="image-actions">
-                                <button class="btn btn-primary" onclick="retryImage(${img.id})">Retry</button>
-                            </div>
-                        ` : ''}
+                        <div class="image-actions" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+                            <button class="btn btn-sm btn-secondary" onclick="gaugeCrop(${img.id})" title="Auto-detect gauge and create closeup">📏 Gauge Crop</button>
+                            ${img.status === 'failed' ? `
+                                <button class="btn btn-sm btn-primary" onclick="retryImage(${img.id})">Retry</button>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             `;
@@ -955,6 +956,88 @@
             } catch (error) {
                 showToast('Retry failed', 'error');
             }
+        }
+        
+        async function gaugeCrop(id) {
+            const btn = event.target;
+            const origText = btn.textContent;
+            btn.textContent = '⏳ Detecting...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/gauge-crop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_id: id })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(`✅ Gauge closeup created`, 'success');
+                    loadImages();
+                } else {
+                    // Auto-detect failed - offer manual mode
+                    showToast(`${result.error}. Click on the gauge in the image to crop manually.`, 'error');
+                    startManualGaugeCrop(id);
+                }
+            } catch (error) {
+                showToast('Gauge crop failed', 'error');
+            }
+            
+            btn.textContent = origText;
+            btn.disabled = false;
+        }
+        
+        function startManualGaugeCrop(imageId) {
+            // Open the original image in lightbox with click-to-crop mode
+            const img = allImages.find(i => i.id === imageId);
+            if (!img) return;
+            
+            const lightbox = document.getElementById('lightbox');
+            const lightboxImg = document.getElementById('lightboxImg');
+            lightboxImg.src = img.original_url;
+            lightbox.classList.add('show');
+            
+            // Show instruction
+            showToast('Click on the gauge in the image to create closeup', 'info');
+            
+            // Add one-time click handler
+            const clickHandler = async (e) => {
+                lightboxImg.removeEventListener('click', clickHandler);
+                lightboxImg.style.cursor = '';
+                
+                // Calculate click position relative to original image
+                const rect = lightboxImg.getBoundingClientRect();
+                const scaleX = lightboxImg.naturalWidth / rect.width;
+                const scaleY = lightboxImg.naturalHeight / rect.height;
+                const x = Math.round((e.clientX - rect.left) * scaleX);
+                const y = Math.round((e.clientY - rect.top) * scaleY);
+                
+                lightbox.classList.remove('show');
+                showToast('⏳ Creating closeup...', 'info');
+                
+                try {
+                    const response = await fetch('/api/gauge-crop', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image_id: imageId, x: x, y: y })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        showToast('✅ Gauge closeup created!', 'success');
+                        loadImages();
+                    } else {
+                        showToast(result.error, 'error');
+                    }
+                } catch (error) {
+                    showToast('Manual crop failed', 'error');
+                }
+            };
+            
+            lightboxImg.style.cursor = 'crosshair';
+            lightboxImg.addEventListener('click', clickHandler);
         }
         
         // Filter tabs

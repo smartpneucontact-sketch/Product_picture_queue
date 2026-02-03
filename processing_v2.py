@@ -750,4 +750,188 @@ class ImageProcessorV2:
 
 
 # Backwards compatibility - alias to original class name
+    # ==================== GAUGE DETECTION ====================
+    
+    def detect_gauge(self, img_array):
+        """
+        Detect the tread depth gauge in a tire photo.
+        Returns (cx, cy, confidence) or None.
+        
+        Uses two signals:
+        1. LCD display: small bright rectangle with high contrast to dark surroundings
+        2. Blue gauge tip: distinctive saturated blue color against dark tire
+        """
+        hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        h, w = gray.shape
+        
+        candidates = []
+        
+        # === Signal 1: LCD Display ===
+        search_h = int(h * 0.65)
+        upper = gray[:search_h, :]
+        
+        thresh = cv2.adaptiveThreshold(upper, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                        cv2.THRESH_BINARY, 31, -10)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        for c in contours:
+            area = cv2.contourArea(c)
+            if area < 150 or area > 8000:
+                continue
+            
+            x, y, cw, ch = cv2.boundingRect(c)
+            aspect = cw / (ch + 1)
+            
+            if aspect < 1.0 or aspect > 6:
+                continue
+            if cw < 30 or cw > 200 or ch < 15 or ch > 100:
+                continue
+            
+            inside_mean = np.mean(upper[y:y+ch, x:x+cw])
+            
+            pad = 25
+            sy1, sy2 = max(0, y - pad), min(search_h, y + ch + pad)
+            sx1, sx2 = max(0, x - pad), min(w, x + cw + pad)
+            
+            surround = upper[sy1:sy2, sx1:sx2].copy()
+            mask = np.zeros_like(surround, dtype=bool)
+            mask[y-sy1:y-sy1+ch, x-sx1:x-sx1+cw] = True
+            border_mean = np.mean(surround[~mask]) if np.sum(~mask) > 0 else 0
+            
+            contrast = inside_mean - border_mean
+            
+            if contrast > 15 and inside_mean > 80 and border_mean < 120:
+                candidates.append({
+                    'type': 'lcd',
+                    'cx': x + cw // 2, 'cy': y + ch // 2,
+                    'score': contrast * (1.5 if 1.5 < aspect < 4 else 0.5)
+                })
+        
+        # === Signal 2: Blue gauge tip ===
+        blue_mask = cv2.inRange(hsv[:search_h, :], (105, 60, 30), (130, 255, 255))
+        kernel = np.ones((3, 3), np.uint8)
+        blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+        
+        blue_contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in blue_contours:
+            area = cv2.contourArea(c)
+            if 20 < area < 3000:
+                x, y, cw, ch = cv2.boundingRect(c)
+                candidates.append({
+                    'type': 'blue_tip',
+                    'cx': x + cw // 2, 'cy': y + ch // 2,
+                    'score': min(area, 500)
+                })
+        
+        if not candidates:
+            return None
+        
+        # Combine signals: LCD + nearby blue tip = high confidence
+        lcds = [c for c in candidates if c['type'] == 'lcd']
+        tips = [c for c in candidates if c['type'] == 'blue_tip']
+        
+        best_score = 0
+        best_pos = None
+        
+        for lcd in lcds:
+            score = lcd['score']
+            for tip in tips:
+                dist = ((lcd['cx'] - tip['cx'])**2 + (lcd['cy'] - tip['cy'])**2)**0.5
+                if dist < 250:
+                    score += tip['score'] * 2
+            if score > best_score:
+                best_score = score
+                best_pos = (lcd['cx'], lcd['cy'])
+        
+        if not best_pos and tips:
+            best_tip = max(tips, key=lambda x: x['score'])
+            best_pos = (best_tip['cx'], best_tip['cy'] + 80)
+            best_score = best_tip['score']
+        
+        if best_pos:
+            confidence = min(best_score / 100, 1.0)
+            logger.info(f"Gauge detected at ({best_pos[0]},{best_pos[1]}), confidence={confidence:.2f}")
+            return (best_pos[0], best_pos[1], confidence)
+        
+        return None
+    
+    def crop_gauge_closeup(self, image_data, gauge_xy=None, output_size=None):
+        """
+        Crop around the tread depth gauge for a close-up measurement image.
+        
+        Args:
+            image_data: Raw image bytes or PIL Image
+            gauge_xy: Optional (x, y) tuple. If None, auto-detect.
+            output_size: Output image size (default: self.output_size)
+            
+        Returns:
+            (jpeg_bytes, message) or (None, error_message)
+        """
+        output_size = output_size or self.output_size
+        
+        if isinstance(image_data, bytes):
+            img = Image.open(BytesIO(image_data)).convert('RGB')
+        elif isinstance(image_data, Image.Image):
+            img = img if img.mode == 'RGB' else img.convert('RGB')
+        else:
+            img = image_data
+        
+        img_array = np.array(img)
+        h, w = img_array.shape[:2]
+        
+        if gauge_xy is None:
+            result = self.detect_gauge(img_array)
+            if result is None:
+                return None, "No gauge detected in image"
+            cx, cy, conf = result
+            if conf < 0.5:
+                return None, f"Low confidence gauge detection ({conf:.2f})"
+        else:
+            cx, cy = gauge_xy
+            conf = 1.0
+        
+        # Crop: tight around gauge with some tire tread context
+        crop_radius = int(min(h, w) * 0.22)
+        
+        # Center crop on gauge
+        x1 = max(0, cx - crop_radius)
+        y1 = max(0, cy - crop_radius)
+        x2 = min(w, cx + crop_radius)
+        y2 = min(h, cy + crop_radius)
+        
+        # Make square
+        crop_w = x2 - x1
+        crop_h = y2 - y1
+        side = max(crop_w, crop_h)
+        
+        center_x = (x1 + x2) // 2
+        center_y = (y1 + y2) // 2
+        x1 = max(0, center_x - side // 2)
+        y1 = max(0, center_y - side // 2)
+        x2 = min(w, x1 + side)
+        y2 = min(h, y1 + side)
+        if x2 - x1 < side:
+            x1 = max(0, x2 - side)
+        if y2 - y1 < side:
+            y1 = max(0, y2 - side)
+        
+        crop = img_array[y1:y2, x1:x2]
+        crop_img = Image.fromarray(crop)
+        crop_img = crop_img.resize((output_size, output_size), Image.Resampling.LANCZOS)
+        
+        # Enhance for readability
+        crop_img = ImageEnhance.Sharpness(crop_img).enhance(1.3)
+        crop_img = ImageEnhance.Contrast(crop_img).enhance(1.1)
+        
+        # Save to bytes
+        output = BytesIO()
+        crop_img.save(output, format='JPEG', quality=98, subsampling=0)
+        output.seek(0)
+        
+        msg = f"Gauge closeup from ({cx},{cy}), confidence={conf:.2f}"
+        logger.info(msg)
+        return output.getvalue(), msg
+
+
 ImageProcessor = ImageProcessorV2

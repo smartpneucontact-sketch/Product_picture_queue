@@ -6,6 +6,7 @@ from storage import CloudinaryStorage
 from processing_v2 import ImageProcessor
 from shopify_client import ShopifyClient
 import threading
+import numpy as np
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -279,6 +280,127 @@ def process_drafts():
         'success': True,
         'message': f'Processing {len(images)} draft images'
     })
+
+
+@app.route('/api/gauge-crop', methods=['POST'])
+def gauge_crop():
+    """
+    Detect tread depth gauge in an image and create a close-up crop.
+    Expects: {'image_id': 1} or {'image_id': 1, 'x': 500, 'y': 300}
+    
+    If x,y provided: crop around that point (manual mode)
+    If not: auto-detect the gauge position
+    
+    Creates a new image record with the cropped closeup.
+    """
+    data = request.get_json()
+    image_id = data.get('image_id')
+    manual_x = data.get('x')
+    manual_y = data.get('y')
+    
+    if not image_id:
+        return jsonify({'error': 'image_id required'}), 400
+    
+    image = Image.query.get(image_id)
+    if not image:
+        return jsonify({'error': 'Image not found'}), 404
+    
+    try:
+        # Download the original image
+        import requests as req
+        response = req.get(image.original_url)
+        original_data = response.content
+        
+        processor = get_processor()
+        
+        # Determine gauge position
+        gauge_xy = None
+        if manual_x is not None and manual_y is not None:
+            gauge_xy = (int(manual_x), int(manual_y))
+        
+        # Create closeup
+        result, message = processor.crop_gauge_closeup(original_data, gauge_xy=gauge_xy)
+        
+        if result is None:
+            return jsonify({'error': message}), 400
+        
+        # Upload to Cloudinary
+        storage = get_storage()
+        closeup_filename = f"gauge_{image.original_filename}"
+        closeup_url = storage.upload_processed_image(result, closeup_filename)
+        
+        # Create a new image record for the closeup
+        closeup_image = Image(
+            original_filename=closeup_filename,
+            original_url=image.original_url,
+            processed_url=closeup_url,
+            sku=image.sku,
+            status='processed',
+            processed_at=datetime.utcnow()
+        )
+        db.session.add(closeup_image)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': message,
+            'closeup_url': closeup_url,
+            'closeup_id': closeup_image.id
+        })
+        
+    except Exception as e:
+        logger.error(f"Gauge crop failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/gauge-detect', methods=['POST'])
+def gauge_detect():
+    """
+    Detect gauge position in an image without cropping.
+    Returns the detected position for UI overlay.
+    Expects: {'image_id': 1}
+    """
+    data = request.get_json()
+    image_id = data.get('image_id')
+    
+    if not image_id:
+        return jsonify({'error': 'image_id required'}), 400
+    
+    image = Image.query.get(image_id)
+    if not image:
+        return jsonify({'error': 'Image not found'}), 404
+    
+    try:
+        import requests as req
+        response = req.get(image.original_url)
+        original_data = response.content
+        
+        from PIL import Image as PILImage
+        from io import BytesIO
+        img = PILImage.open(BytesIO(original_data)).convert('RGB')
+        img_array = np.array(img)
+        
+        processor = get_processor()
+        result = processor.detect_gauge(img_array)
+        
+        if result is None:
+            return jsonify({
+                'detected': False,
+                'message': 'No gauge found'
+            })
+        
+        cx, cy, conf = result
+        return jsonify({
+            'detected': True,
+            'x': cx,
+            'y': cy,
+            'confidence': round(conf, 2),
+            'image_width': img.size[0],
+            'image_height': img.size[1]
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/process', methods=['POST'])
