@@ -683,9 +683,9 @@
                                class="${img.processed_url ? '' : 'disabled'}">⬇ Processed</a>
                         </div>
                         <div class="image-actions" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-                            <button class="btn btn-sm btn-secondary" onclick="gaugeCrop(${img.id})" title="Auto-detect gauge and create closeup">📏 Gauge Crop</button>
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); gaugeCrop(${img.id}, this)" title="Auto-detect gauge and create closeup">Gauge Crop</button>
                             ${img.status === 'failed' ? `
-                                <button class="btn btn-sm btn-primary" onclick="retryImage(${img.id})">Retry</button>
+                                <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); retryImage(${img.id})">Retry</button>
                             ` : ''}
                         </div>
                     </div>
@@ -958,8 +958,7 @@
             }
         }
         
-        async function gaugeCrop(id) {
-            const btn = event.target;
+        async function gaugeCrop(id, btn) {
             const origText = btn.textContent;
             btn.textContent = '⏳ Detecting...';
             btn.disabled = true;
@@ -974,15 +973,15 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    showToast(`✅ Gauge closeup created`, 'success');
+                    showToast('✅ Gauge closeup created', 'success');
                     loadImages();
                 } else {
-                    // Auto-detect failed - offer manual mode
-                    showToast(`${result.error}. Click on the gauge in the image to crop manually.`, 'error');
+                    showToast(result.error + '. Click on gauge in image to crop manually.', 'error');
                     startManualGaugeCrop(id);
                 }
             } catch (error) {
-                showToast('Gauge crop failed', 'error');
+                console.error('Gauge crop error:', error);
+                showToast('Gauge crop failed: ' + error.message, 'error');
             }
             
             btn.textContent = origText;
