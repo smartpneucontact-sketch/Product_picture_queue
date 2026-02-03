@@ -556,6 +556,10 @@
     <!-- Lightbox -->
     <div class="lightbox" id="lightbox">
         <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+        <div id="lightboxInstruction" style="display:none; position:absolute; top:20px; left:50%; transform:translateX(-50%); 
+             background:rgba(76,175,80,0.9); color:white; padding:12px 24px; border-radius:8px; font-size:16px; font-weight:600; z-index:1001;">
+            👆 Click on the gauge to crop around it
+        </div>
         <img id="lightboxImg" src="">
     </div>
     
@@ -683,7 +687,8 @@
                                class="${img.processed_url ? '' : 'disabled'}">⬇ Processed</a>
                         </div>
                         <div class="image-actions" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); gaugeCrop(${img.id}, this)" title="Auto-detect gauge and create closeup">Gauge Crop</button>
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); gaugeCrop(${img.id}, this)" title="Auto-detect gauge and create closeup">Auto Gauge</button>
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); startManualGaugeCrop(${img.id})" title="Click on gauge to crop manually">Manual Gauge</button>
                             ${img.status === 'failed' ? `
                                 <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); retryImage(${img.id})">Retry</button>
                             ` : ''}
@@ -989,32 +994,36 @@
         }
         
         function startManualGaugeCrop(imageId) {
-            // Open the original image in lightbox with click-to-crop mode
             const img = allImages.find(i => i.id === imageId);
             if (!img) return;
             
             const lightbox = document.getElementById('lightbox');
             const lightboxImg = document.getElementById('lightboxImg');
+            const instruction = document.getElementById('lightboxInstruction');
+            
             lightboxImg.src = img.original_url;
             lightbox.classList.add('show');
+            instruction.style.display = 'block';
+            lightboxImg.style.cursor = 'crosshair';
             
-            // Show instruction
-            showToast('Click on the gauge in the image to create closeup', 'info');
+            // Remove any old handlers
+            const newImg = lightboxImg.cloneNode(true);
+            lightboxImg.parentNode.replaceChild(newImg, lightboxImg);
             
-            // Add one-time click handler
-            const clickHandler = async (e) => {
-                lightboxImg.removeEventListener('click', clickHandler);
-                lightboxImg.style.cursor = '';
+            newImg.style.cursor = 'crosshair';
+            newImg.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                instruction.style.display = 'none';
+                newImg.style.cursor = '';
                 
-                // Calculate click position relative to original image
-                const rect = lightboxImg.getBoundingClientRect();
-                const scaleX = lightboxImg.naturalWidth / rect.width;
-                const scaleY = lightboxImg.naturalHeight / rect.height;
+                const rect = newImg.getBoundingClientRect();
+                const scaleX = newImg.naturalWidth / rect.width;
+                const scaleY = newImg.naturalHeight / rect.height;
                 const x = Math.round((e.clientX - rect.left) * scaleX);
                 const y = Math.round((e.clientY - rect.top) * scaleY);
                 
                 lightbox.classList.remove('show');
-                showToast('⏳ Creating closeup...', 'info');
+                showToast('Creating closeup...', 'info');
                 
                 try {
                     const response = await fetch('/api/gauge-crop', {
@@ -1025,7 +1034,7 @@
                     
                     const result = await response.json();
                     if (result.success) {
-                        showToast('✅ Gauge closeup created!', 'success');
+                        showToast('Gauge closeup created!', 'success');
                         loadImages();
                     } else {
                         showToast(result.error, 'error');
@@ -1033,10 +1042,7 @@
                 } catch (error) {
                     showToast('Manual crop failed', 'error');
                 }
-            };
-            
-            lightboxImg.style.cursor = 'crosshair';
-            lightboxImg.addEventListener('click', clickHandler);
+            }, { once: true });
         }
         
         // Filter tabs
@@ -1057,6 +1063,9 @@
         
         function closeLightbox() {
             document.getElementById('lightbox').classList.remove('show');
+            document.getElementById('lightboxInstruction').style.display = 'none';
+            const img = document.getElementById('lightboxImg');
+            if (img) img.style.cursor = '';
         }
         
         document.getElementById('lightbox').addEventListener('click', (e) => {

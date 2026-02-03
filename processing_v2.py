@@ -860,6 +860,13 @@ class ImageProcessorV2:
         """
         Crop around the tread depth gauge for a close-up measurement image.
         
+        Pipeline:
+        1. Detect or use provided gauge position
+        2. Crop around the gauge
+        3. Remove background (white backdrop) but keep hand + gauge + tire
+        4. Place on clean white background, centered
+        5. Enhance for readability
+        
         Args:
             image_data: Raw image bytes or PIL Image
             gauge_xy: Optional (x, y) tuple. If None, auto-detect.
@@ -891,10 +898,9 @@ class ImageProcessorV2:
             cx, cy = gauge_xy
             conf = 1.0
         
-        # Crop: tight around gauge with some tire tread context
-        crop_radius = int(min(h, w) * 0.22)
+        # Step 1: Crop around gauge with context
+        crop_radius = int(min(h, w) * 0.28)  # Slightly larger to include hand
         
-        # Center crop on gauge
         x1 = max(0, cx - crop_radius)
         y1 = max(0, cy - crop_radius)
         x2 = min(w, cx + crop_radius)
@@ -918,15 +924,61 @@ class ImageProcessorV2:
         
         crop = img_array[y1:y2, x1:x2]
         crop_img = Image.fromarray(crop)
-        crop_img = crop_img.resize((output_size, output_size), Image.Resampling.LANCZOS)
         
-        # Enhance for readability
-        crop_img = ImageEnhance.Sharpness(crop_img).enhance(1.3)
-        crop_img = ImageEnhance.Contrast(crop_img).enhance(1.1)
+        logger.info(f"Gauge crop: ({x1},{y1})-({x2},{y2}), size={crop_img.size}")
+        
+        # Step 2: Remove background (keeps hand + gauge + tire as foreground)
+        crop_bytes = BytesIO()
+        crop_img.save(crop_bytes, format='JPEG', quality=95)
+        crop_bytes = crop_bytes.getvalue()
+        
+        try:
+            no_bg_data = self.remove_background(crop_bytes)
+            no_bg_img = Image.open(BytesIO(no_bg_data)).convert('RGBA')
+            logger.info(f"Background removed from gauge crop: {no_bg_img.size}")
+        except Exception as e:
+            logger.warning(f"Background removal failed for gauge crop: {e}, using original")
+            no_bg_img = crop_img.convert('RGBA')
+        
+        # Step 3: Edge refinement on the bg-removed crop
+        if self.edge_refinement:
+            no_bg_img = self.refine_edges(no_bg_img)
+        
+        # Step 4: Center on white background
+        # Find content bounds
+        alpha = np.array(no_bg_img.split()[3])
+        content_mask = alpha > 10
+        
+        if np.any(content_mask):
+            rows = np.where(np.any(content_mask, axis=1))[0]
+            cols = np.where(np.any(content_mask, axis=0))[0]
+            bbox = (cols[0], rows[0], cols[-1] + 1, rows[-1] + 1)
+            content = no_bg_img.crop(bbox)
+        else:
+            content = no_bg_img
+        
+        cw, ch = content.size
+        max_dim = max(cw, ch)
+        margin = int(max_dim * 0.05)  # 5% margin
+        square_size = max_dim + margin * 2
+        
+        # Create white square canvas
+        canvas = Image.new('RGBA', (square_size, square_size), (255, 255, 255, 255))
+        x_off = (square_size - cw) // 2
+        y_off = (square_size - ch) // 2
+        canvas.paste(content, (x_off, y_off), content)
+        
+        # Resize to output size
+        canvas = canvas.resize((output_size, output_size), Image.Resampling.LANCZOS)
+        
+        # Step 5: Enhance for readability
+        final = canvas.convert('RGB')
+        final = ImageEnhance.Sharpness(final).enhance(1.3)
+        final = ImageEnhance.Contrast(final).enhance(1.05)
         
         # Save to bytes
         output = BytesIO()
-        crop_img.save(output, format='JPEG', quality=98, subsampling=0)
+        final.save(output, format='JPEG', quality=98, subsampling=0)
         output.seek(0)
         
         msg = f"Gauge closeup from ({cx},{cy}), confidence={conf:.2f}"
