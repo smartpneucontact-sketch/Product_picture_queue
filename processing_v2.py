@@ -976,35 +976,56 @@ class ImageProcessorV2:
         
         logger.info(f"Gauge crop: ({x1},{y1})-({x2},{y2}), size={crop_img.size}")
         
-        # Step 2: Whiten the backdrop
-        # The white curtain/fabric has high brightness + low saturation
-        # We push those pixels to pure white while keeping hand/gauge/tire intact
-        crop_f = crop.astype(np.float32)
-        gray_crop = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        # Step 2: Whiten the backdrop using edge-connected component analysis
+        # Only whitens bright pixels connected to image borders (backdrop fabric),
+        # preserving bright areas enclosed by dark pixels (LCD screen, gauge markings)
+        gray_crop = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
         hsv_crop = cv2.cvtColor(crop, cv2.COLOR_RGB2HSV)
+        crop_h, crop_w = gray_crop.shape
         
-        # Brightness mask: bright pixels are likely backdrop
-        bright_threshold = 175
-        bright_softness = 40
-        bright_mask = np.clip((gray_crop - bright_threshold) / bright_softness, 0, 1)
+        # Find all bright pixel regions (potential backdrop)
+        potential_bg = (gray_crop > 150).astype(np.uint8) * 255
         
-        # Saturation mask: low saturation = backdrop (not colored objects)
+        # Label connected components
+        num_labels, labels = cv2.connectedComponents(potential_bg, connectivity=8)
+        
+        # Find which component labels touch any border
+        border_labels = set()
+        border_labels.update(labels[0, :].tolist())       # top
+        border_labels.update(labels[-1, :].tolist())       # bottom
+        border_labels.update(labels[:, 0].tolist())        # left
+        border_labels.update(labels[:, -1].tolist())       # right
+        border_labels.discard(0)  # 0 = background (dark pixels)
+        
+        # Create mask of only border-connected bright regions
+        bg_binary = np.zeros((crop_h, crop_w), np.uint8)
+        for label in border_labels:
+            bg_binary[labels == label] = 255
+        
+        # Dilate slightly to catch edge fringing
+        bg_binary = cv2.dilate(bg_binary, np.ones((5, 5), np.uint8), iterations=1)
+        
+        # Create smooth float mask
+        bg_float = cv2.GaussianBlur(bg_binary.astype(np.float32) / 255, (31, 31), 0)
+        
+        # Residual: gently push very bright low-saturation pixels not reached by flood
+        # (catches small disconnected fabric patches between fingers etc.)
         sat = hsv_crop[:,:,1].astype(np.float32)
-        sat_mask = np.clip((35 - sat) / 25, 0, 1)
+        residual_bright = np.clip((gray_crop.astype(np.float32) - 185) / 35, 0, 1)
+        residual_sat = np.clip((25 - sat) / 20, 0, 1)
+        residual = residual_bright * residual_sat * (1 - bg_float) * 0.7
+        residual = cv2.GaussianBlur(residual, (15, 15), 0)
         
-        # Combined: must be bright AND low saturation
-        bg_mask = bright_mask * sat_mask
-        
-        # Smooth to avoid harsh edges
-        bg_mask = cv2.GaussianBlur(bg_mask, (25, 25), 0)
+        combined_mask = np.clip(bg_float + residual, 0, 1)
         
         # Blend original with white using mask
+        crop_f = crop.astype(np.float32)
         white = np.full_like(crop_f, 255.0)
-        whitened = crop_f * (1 - bg_mask[:,:,np.newaxis]) + white * bg_mask[:,:,np.newaxis]
+        whitened = crop_f * (1 - combined_mask[:,:,np.newaxis]) + white * combined_mask[:,:,np.newaxis]
         whitened = np.clip(whitened, 0, 255).astype(np.uint8)
         
         crop_img = Image.fromarray(whitened)
-        logger.info("Applied backdrop whitening to gauge crop")
+        logger.info(f"Backdrop whitening: {len(border_labels)} edge regions, {np.mean(bg_binary > 0)*100:.0f}% coverage")
         
         # Step 3: Resize to output size
         crop_img = crop_img.resize((output_size, output_size), Image.Resampling.LANCZOS)
