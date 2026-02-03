@@ -329,23 +329,17 @@ def gauge_crop():
         closeup_filename = f"gauge_{image.original_filename}"
         closeup_url = storage.upload_processed_image(result, closeup_filename)
         
-        # Create a new image record for the closeup
-        closeup_image = Image(
-            original_filename=closeup_filename,
-            original_url=image.original_url,
-            processed_url=closeup_url,
-            sku=image.sku,
-            status='processed',
-            processed_at=datetime.utcnow()
-        )
-        db.session.add(closeup_image)
+        # Update the existing image with the gauge closeup as processed version
+        image.processed_url = closeup_url
+        image.status = 'processed'
+        image.processed_at = datetime.utcnow()
         db.session.commit()
         
         return jsonify({
             'success': True,
             'message': message,
             'closeup_url': closeup_url,
-            'closeup_id': closeup_image.id
+            'image_id': image.id
         })
         
     except Exception as e:
