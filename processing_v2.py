@@ -841,8 +841,8 @@ class ImageProcessorV2:
                 # LCD should be in center 70% horizontally
                 if c['cx'] < w * 0.15 or c['cx'] > w * 0.85:
                     continue
-                # LCD should be in upper 45% of image
-                if c['cy'] > h * 0.45:
+                # LCD should be in upper 50% of image
+                if c['cy'] > h * 0.50:
                     continue
             if c['type'] == 'blue_tip':
                 # Blue tip also in center area
@@ -862,6 +862,22 @@ class ImageProcessorV2:
         # Must have at least one LCD candidate
         if not lcds:
             return None
+        
+        # Filter out clusters of LCD candidates that look like label text rows
+        # (multiple text rows spread over a large vertical area on a label)
+        # vs gauge LCD segments (multiple detections on the same small LCD screen)
+        if len(lcds) >= 2:
+            lcds_sorted = sorted(lcds, key=lambda c: c['cy'])
+            y_spread = lcds_sorted[-1]['cy'] - lcds_sorted[0]['cy']
+            x_spread = max(c['cx'] for c in lcds) - min(c['cx'] for c in lcds)
+            
+            # Gauge LCD: tight cluster (< 100px vertical spread, < 150px horizontal)
+            # Label text: wider spread (> 150px vertical, multiple text rows)
+            if y_spread > 120:
+                # Wide vertical spread = label text rows, reject all
+                logger.info(f"LCD candidates spread {y_spread}px vertically - likely label text")
+                return None
+            # else: tight cluster = same gauge LCD, use their centroid
         
         best_score = 0
         best_pos = None
@@ -960,7 +976,37 @@ class ImageProcessorV2:
         
         logger.info(f"Gauge crop: ({x1},{y1})-({x2},{y2}), size={crop_img.size}")
         
-        # Step 2: Resize to output size
+        # Step 2: Whiten the backdrop
+        # The white curtain/fabric has high brightness + low saturation
+        # We push those pixels to pure white while keeping hand/gauge/tire intact
+        crop_f = crop.astype(np.float32)
+        gray_crop = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        hsv_crop = cv2.cvtColor(crop, cv2.COLOR_RGB2HSV)
+        
+        # Brightness mask: bright pixels are likely backdrop
+        bright_threshold = 175
+        bright_softness = 40
+        bright_mask = np.clip((gray_crop - bright_threshold) / bright_softness, 0, 1)
+        
+        # Saturation mask: low saturation = backdrop (not colored objects)
+        sat = hsv_crop[:,:,1].astype(np.float32)
+        sat_mask = np.clip((35 - sat) / 25, 0, 1)
+        
+        # Combined: must be bright AND low saturation
+        bg_mask = bright_mask * sat_mask
+        
+        # Smooth to avoid harsh edges
+        bg_mask = cv2.GaussianBlur(bg_mask, (25, 25), 0)
+        
+        # Blend original with white using mask
+        white = np.full_like(crop_f, 255.0)
+        whitened = crop_f * (1 - bg_mask[:,:,np.newaxis]) + white * bg_mask[:,:,np.newaxis]
+        whitened = np.clip(whitened, 0, 255).astype(np.uint8)
+        
+        crop_img = Image.fromarray(whitened)
+        logger.info("Applied backdrop whitening to gauge crop")
+        
+        # Step 3: Resize to output size
         crop_img = crop_img.resize((output_size, output_size), Image.Resampling.LANCZOS)
         
         # Step 3: Enhance for readability
