@@ -801,15 +801,21 @@ class ImageProcessorV2:
             
             contrast = inside_mean - border_mean
             
-            if contrast > 15 and inside_mean > 80 and border_mean < 120:
+            # LCD: brighter than surroundings, dark surroundings (gauge body)
+            if contrast > 10 and inside_mean > 40 and border_mean < 130:
+                # Center bias: gauge is on tire which is roughly centered
+                cx_norm = (x + cw // 2) / w  # 0=left, 0.5=center, 1=right
+                center_dist = abs(cx_norm - 0.5) * 2  # 0=center, 1=edge
+                center_score = 1.0 - center_dist * 0.5  # Penalize off-center
+                
                 candidates.append({
                     'type': 'lcd',
                     'cx': x + cw // 2, 'cy': y + ch // 2,
-                    'score': contrast * (1.5 if 1.5 < aspect < 4 else 0.5)
+                    'score': contrast * (1.5 if 1.5 < aspect < 4 else 0.5) * center_score
                 })
         
-        # === Signal 2: Blue gauge tip ===
-        blue_mask = cv2.inRange(hsv[:search_h, :], (105, 60, 30), (130, 255, 255))
+        # === Signal 2: Blue gauge tip (wider range for different lighting) ===
+        blue_mask = cv2.inRange(hsv[:search_h, :], (90, 40, 25), (135, 255, 255))
         kernel = np.ones((3, 3), np.uint8)
         blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
         
@@ -827,9 +833,35 @@ class ImageProcessorV2:
         if not candidates:
             return None
         
-        # Combine signals: LCD + nearby blue tip = high confidence
+        # Filter: LCD candidates should be in the central-upper area of the image
+        # (the gauge is always on the tire which is roughly centered)
+        filtered = []
+        for c in candidates:
+            if c['type'] == 'lcd':
+                # LCD should be in center 70% horizontally
+                if c['cx'] < w * 0.15 or c['cx'] > w * 0.85:
+                    continue
+                # LCD should be in upper 45% of image
+                if c['cy'] > h * 0.45:
+                    continue
+            if c['type'] == 'blue_tip':
+                # Blue tip also in center area
+                if c['cx'] < w * 0.2 or c['cx'] > w * 0.8:
+                    continue
+            filtered.append(c)
+        
+        if not filtered:
+            return None
+        
+        candidates = filtered
+        
+        # Combine signals: need at least LCD; blue tip boosts confidence
         lcds = [c for c in candidates if c['type'] == 'lcd']
         tips = [c for c in candidates if c['type'] == 'blue_tip']
+        
+        # Must have at least one LCD candidate
+        if not lcds:
+            return None
         
         best_score = 0
         best_pos = None
@@ -844,11 +876,6 @@ class ImageProcessorV2:
                 best_score = score
                 best_pos = (lcd['cx'], lcd['cy'])
         
-        if not best_pos and tips:
-            best_tip = max(tips, key=lambda x: x['score'])
-            best_pos = (best_tip['cx'], best_tip['cy'] + 80)
-            best_score = best_tip['score']
-        
         if best_pos:
             confidence = min(best_score / 100, 1.0)
             logger.info(f"Gauge detected at ({best_pos[0]},{best_pos[1]}), confidence={confidence:.2f}")
@@ -862,10 +889,11 @@ class ImageProcessorV2:
         
         Pipeline:
         1. Detect or use provided gauge position
-        2. Crop around the gauge
-        3. Remove background (white backdrop) but keep hand + gauge + tire
-        4. Place on clean white background, centered
-        5. Enhance for readability
+        2. Crop tightly around gauge + hand + tire tread (exclude label)
+        3. Place on clean white background, centered
+        4. Enhance for readability
+        
+        No background removal — the hand holding the gauge must stay visible.
         
         Args:
             image_data: Raw image bytes or PIL Image
@@ -898,19 +926,24 @@ class ImageProcessorV2:
             cx, cy = gauge_xy
             conf = 1.0
         
-        # Step 1: Crop around gauge with context
-        crop_radius = int(min(h, w) * 0.28)  # Slightly larger to include hand
+        # Step 1: Tight crop around gauge
+        # Focus on gauge + hand + tire tread only, NOT the label below
+        # The gauge LCD is the center point, hand comes from above/side
+        crop_radius_x = int(min(w, h) * 0.18)  # Horizontal span
+        crop_radius_up = int(min(w, h) * 0.20)   # More room above (hand)
+        crop_radius_down = int(min(w, h) * 0.10)  # Less below (avoid label)
         
-        x1 = max(0, cx - crop_radius)
-        y1 = max(0, cy - crop_radius)
-        x2 = min(w, cx + crop_radius)
-        y2 = min(h, cy + crop_radius)
+        x1 = max(0, cx - crop_radius_x)
+        y1 = max(0, cy - crop_radius_up)
+        x2 = min(w, cx + crop_radius_x)
+        y2 = min(h, cy + crop_radius_down)
         
         # Make square
         crop_w = x2 - x1
         crop_h = y2 - y1
         side = max(crop_w, crop_h)
         
+        # Re-center keeping the bias
         center_x = (x1 + x2) // 2
         center_y = (y1 + y2) // 2
         x1 = max(0, center_x - side // 2)
@@ -927,58 +960,16 @@ class ImageProcessorV2:
         
         logger.info(f"Gauge crop: ({x1},{y1})-({x2},{y2}), size={crop_img.size}")
         
-        # Step 2: Remove background (keeps hand + gauge + tire as foreground)
-        crop_bytes = BytesIO()
-        crop_img.save(crop_bytes, format='JPEG', quality=95)
-        crop_bytes = crop_bytes.getvalue()
+        # Step 2: Resize to output size
+        crop_img = crop_img.resize((output_size, output_size), Image.Resampling.LANCZOS)
         
-        try:
-            no_bg_data = self.remove_background(crop_bytes)
-            no_bg_img = Image.open(BytesIO(no_bg_data)).convert('RGBA')
-            logger.info(f"Background removed from gauge crop: {no_bg_img.size}")
-        except Exception as e:
-            logger.warning(f"Background removal failed for gauge crop: {e}, using original")
-            no_bg_img = crop_img.convert('RGBA')
-        
-        # Step 3: Edge refinement on the bg-removed crop
-        if self.edge_refinement:
-            no_bg_img = self.refine_edges(no_bg_img)
-        
-        # Step 4: Center on white background
-        # Find content bounds
-        alpha = np.array(no_bg_img.split()[3])
-        content_mask = alpha > 10
-        
-        if np.any(content_mask):
-            rows = np.where(np.any(content_mask, axis=1))[0]
-            cols = np.where(np.any(content_mask, axis=0))[0]
-            bbox = (cols[0], rows[0], cols[-1] + 1, rows[-1] + 1)
-            content = no_bg_img.crop(bbox)
-        else:
-            content = no_bg_img
-        
-        cw, ch = content.size
-        max_dim = max(cw, ch)
-        margin = int(max_dim * 0.05)  # 5% margin
-        square_size = max_dim + margin * 2
-        
-        # Create white square canvas
-        canvas = Image.new('RGBA', (square_size, square_size), (255, 255, 255, 255))
-        x_off = (square_size - cw) // 2
-        y_off = (square_size - ch) // 2
-        canvas.paste(content, (x_off, y_off), content)
-        
-        # Resize to output size
-        canvas = canvas.resize((output_size, output_size), Image.Resampling.LANCZOS)
-        
-        # Step 5: Enhance for readability
-        final = canvas.convert('RGB')
-        final = ImageEnhance.Sharpness(final).enhance(1.3)
-        final = ImageEnhance.Contrast(final).enhance(1.05)
+        # Step 3: Enhance for readability
+        crop_img = ImageEnhance.Sharpness(crop_img).enhance(1.3)
+        crop_img = ImageEnhance.Contrast(crop_img).enhance(1.05)
         
         # Save to bytes
         output = BytesIO()
-        final.save(output, format='JPEG', quality=98, subsampling=0)
+        crop_img.save(output, format='JPEG', quality=98, subsampling=0)
         output.seek(0)
         
         msg = f"Gauge closeup from ({cx},{cy}), confidence={conf:.2f}"
