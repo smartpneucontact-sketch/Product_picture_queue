@@ -282,13 +282,28 @@ class ImageProcessorV2:
         # 2. Find contours of bright regions
         contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
+        # Pre-compute: which bright regions connect to the image border?
+        # These are backdrop (through tire hole), not labels on the tire.
+        num_cc, cc_labels = cv2.connectedComponents(bright_mask, connectivity=8)
+        border_cc = set()
+        border_cc.update(cc_labels[0, :].tolist())       # top
+        border_cc.update(cc_labels[-1, :].tolist())       # bottom
+        border_cc.update(cc_labels[:, 0].tolist())        # left
+        border_cc.update(cc_labels[:, -1].tolist())       # right
+        border_cc.discard(0)
+        
+        # Create border-connected mask for quick lookup
+        border_connected = np.zeros((h, w), dtype=bool)
+        for lbl in border_cc:
+            border_connected[cc_labels == lbl] = True
+        
         for contour in contours:
             area = cv2.contourArea(contour)
             
             # Filter by size - labels are typically 1-15% of tire area
             tire_area = np.sum(tire_region)
             min_area = tire_area * 0.002  # Min 0.2% of tire
-            max_area = tire_area * 0.2    # Max 20% of tire
+            max_area = tire_area * 0.15   # Max 15% of tire
             
             if area < min_area or area > max_area:
                 continue
@@ -298,6 +313,20 @@ class ImageProcessorV2:
             # Check aspect ratio - labels are usually rectangular
             aspect = max(cw, ch) / (min(cw, ch) + 1)
             if aspect > 8:  # Too elongated
+                continue
+            
+            # Reject if this region overlaps with border-connected bright areas
+            # (backdrop visible through tire hole, not a label)
+            roi_border = border_connected[y:y+ch, x:x+cw]
+            if np.mean(roi_border) > 0.3:  # >30% of region touches border-connected area
+                logger.debug(f"Rejected border-connected region: ({x},{y}) {cw}x{ch}")
+                continue
+            
+            # Reject if shape doesn't fill bounding box well (irregular = backdrop through tire hole)
+            # Real labels are rectangular paper, so fill ratio > 0.5
+            rect_fill = area / (cw * ch) if cw * ch > 0 else 0
+            if rect_fill < 0.45:
+                logger.debug(f"Rejected low-fill region: ({x},{y}) {cw}x{ch}, fill={rect_fill:.2f}")
                 continue
             
             # Check if region has text-like contrast (dark on light)
@@ -313,9 +342,21 @@ class ImageProcessorV2:
                 label_mask[y1:y2, x1:x2] = 1.0
                 logger.debug(f"Label detected: ({x},{y}) {cw}x{ch}, std={roi_std:.1f}")
         
-        # 3. Also protect pure white areas on the tire (may be label edges)
+        # 3. Also protect small pure white areas on the tire (label paper, stickers)
+        # But NOT large white areas (backdrop visible through tire hole)
         pure_white_on_tire = (brightness > 230) & tire_region
-        label_mask = np.maximum(label_mask, pure_white_on_tire.astype(np.float32))
+        pure_white_mask = pure_white_on_tire.astype(np.uint8) * 255
+        
+        # Only keep small white regions (actual labels), reject large ones (backdrop)
+        num_wlabels, wlabels, wstats, _ = cv2.connectedComponentsWithStats(pure_white_mask, connectivity=8)
+        filtered_white = np.zeros((h, w), dtype=np.float32)
+        for i in range(1, num_wlabels):
+            area = wstats[i, cv2.CC_STAT_AREA]
+            # Labels are small (< 5% of image), backdrop is large
+            if area < h * w * 0.05:
+                filtered_white[wlabels == i] = 1.0
+        
+        label_mask = np.maximum(label_mask, filtered_white)
         
         # 4. Smooth the mask edges for blending
         if np.any(label_mask > 0):
