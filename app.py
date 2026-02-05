@@ -452,7 +452,11 @@ def process_images(image_ids, app, upload_to_shopify=True):
                 
                 # Download original image
                 import requests
-                response = requests.get(image.original_url)
+                response = requests.get(image.original_url, timeout=30)
+                if response.status_code != 200:
+                    raise Exception(f"Failed to download image: HTTP {response.status_code}")
+                if len(response.content) < 1000:
+                    raise Exception(f"Downloaded data too small ({len(response.content)} bytes), likely an error page")
                 original_data = response.content
                 
                 # Process image (bg removal + crop)
@@ -514,6 +518,20 @@ def retry_image(image_id):
     thread.start()
     
     return jsonify({'success': True})
+
+
+@app.route('/api/reset-stuck', methods=['POST'])
+def reset_stuck():
+    """Reset stuck processing images to failed status."""
+    stuck = Image.query.filter_by(status='processing').all()
+    count = 0
+    for img in stuck:
+        img.status = 'failed'
+        img.error_message = 'Reset: was stuck in processing'
+        count += 1
+    db.session.commit()
+    logger.info(f"Reset {count} stuck images")
+    return jsonify({'reset': count})
 
 
 # =============================================================================
