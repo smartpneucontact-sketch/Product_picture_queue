@@ -17,6 +17,19 @@ app.config.from_object(Config)
 # Initialize database
 db.init_app(app)
 
+# Auto-migrate: add image_type column if it doesn't exist
+with app.app_context():
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        columns = [c['name'] for c in inspector.get_columns('images')]
+        if 'image_type' not in columns:
+            db.session.execute(text("ALTER TABLE images ADD COLUMN image_type VARCHAR(20) DEFAULT 'front'"))
+            db.session.commit()
+            logger.info("Added image_type column to images table")
+    except Exception as e:
+        logger.warning(f"Migration check failed (may be normal on first run): {e}")
+
 # Initialize services (lazy loading)
 _storage = None
 _processor = None
@@ -472,7 +485,9 @@ def process_images(image_ids, app, upload_to_shopify=True):
                 original_data = response.content
                 
                 # Process image (bg removal + crop)
-                processed_data = processor.process(original_data)
+                # Side images skip label detection, front images find max 1 label
+                image_type = image.image_type or 'front'
+                processed_data = processor.process(original_data, image_type=image_type)
                 
                 # Upload processed image to Cloudinary
                 processed_url = storage.upload_processed_image(processed_data, image.original_filename)
@@ -544,6 +559,21 @@ def reset_stuck():
     db.session.commit()
     logger.info(f"Reset {count} stuck images")
     return jsonify({'reset': count})
+
+
+@app.route('/api/images/<int:image_id>/mark-side', methods=['POST'])
+def mark_side(image_id):
+    """Toggle image type between front and side."""
+    image = Image.query.get_or_404(image_id)
+    
+    # Toggle between front and side
+    if image.image_type == 'side':
+        image.image_type = 'front'
+    else:
+        image.image_type = 'side'
+    
+    db.session.commit()
+    return jsonify({'success': True, 'image_type': image.image_type})
 
 
 # =============================================================================

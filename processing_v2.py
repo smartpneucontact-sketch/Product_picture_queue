@@ -236,7 +236,7 @@ class ImageProcessorV2:
     
     # ==================== LABEL DETECTION ====================
     
-    def detect_label_regions(self, img_array, alpha_mask=None):
+    def detect_label_regions(self, img_array, alpha_mask=None, max_labels=1):
         """
         Detect label/text regions on tire.
         Labels are typically white/light rectangles with dark text on the tire.
@@ -244,6 +244,7 @@ class ImageProcessorV2:
         Args:
             img_array: RGB image array
             alpha_mask: Optional alpha channel to identify tire vs background
+            max_labels: Maximum number of labels to detect (default 1)
             
         Returns a mask where 1.0 = label area (protect), 0.0 = tire area (enhance).
         """
@@ -305,6 +306,9 @@ class ImageProcessorV2:
         for lbl in border_cc:
             border_connected[cc_labels == lbl] = True
         
+        # Collect candidate labels with their scores
+        label_candidates = []
+        
         for contour in contours:
             area = cv2.contourArea(contour)
             
@@ -343,28 +347,43 @@ class ImageProcessorV2:
             
             # Labels have high local contrast (text)
             if roi_std > 20:  # Has dark text on light background
-                # Mark this region as label
-                pad = 15
-                x1, y1 = max(0, x - pad), max(0, y - pad)
-                x2, y2 = min(w, x + cw + pad), min(h, y + ch + pad)
-                label_mask[y1:y2, x1:x2] = 1.0
-                logger.debug(f"Label detected: ({x},{y}) {cw}x{ch}, std={roi_std:.1f}")
+                # Score by area (prefer larger labels)
+                label_candidates.append({
+                    'x': x, 'y': y, 'w': cw, 'h': ch,
+                    'area': area, 'std': roi_std,
+                    'score': area * (roi_std / 50)  # Score considers size and contrast
+                })
+        
+        # Sort by score (descending) and keep only max_labels
+        label_candidates.sort(key=lambda c: c['score'], reverse=True)
+        label_candidates = label_candidates[:max_labels]
+        
+        # Mark selected labels
+        for label in label_candidates:
+            x, y, cw, ch = label['x'], label['y'], label['w'], label['h']
+            pad = 15
+            x1, y1 = max(0, x - pad), max(0, y - pad)
+            x2, y2 = min(w, x + cw + pad), min(h, y + ch + pad)
+            label_mask[y1:y2, x1:x2] = 1.0
+            logger.debug(f"Label detected: ({x},{y}) {cw}x{ch}, std={label['std']:.1f}")
         
         # 3. Also protect small pure white areas on the tire (label paper, stickers)
         # But NOT large white areas (backdrop visible through tire hole)
-        pure_white_on_tire = (brightness > 230) & tire_region
-        pure_white_mask = pure_white_on_tire.astype(np.uint8) * 255
-        
-        # Only keep small white regions (actual labels), reject large ones (backdrop)
-        num_wlabels, wlabels, wstats, _ = cv2.connectedComponentsWithStats(pure_white_mask, connectivity=8)
-        filtered_white = np.zeros((h, w), dtype=np.float32)
-        for i in range(1, num_wlabels):
-            area = wstats[i, cv2.CC_STAT_AREA]
-            # Labels are small (< 5% of image), backdrop is large
-            if area < h * w * 0.05:
-                filtered_white[wlabels == i] = 1.0
-        
-        label_mask = np.maximum(label_mask, filtered_white)
+        # Skip this if we already have max labels
+        if len(label_candidates) < max_labels:
+            pure_white_on_tire = (brightness > 230) & tire_region
+            pure_white_mask = pure_white_on_tire.astype(np.uint8) * 255
+            
+            # Only keep small white regions (actual labels), reject large ones (backdrop)
+            num_wlabels, wlabels, wstats, _ = cv2.connectedComponentsWithStats(pure_white_mask, connectivity=8)
+            filtered_white = np.zeros((h, w), dtype=np.float32)
+            for i in range(1, num_wlabels):
+                area = wstats[i, cv2.CC_STAT_AREA]
+                # Labels are small (< 5% of image), backdrop is large
+                if area < h * w * 0.05:
+                    filtered_white[wlabels == i] = 1.0
+            
+            label_mask = np.maximum(label_mask, filtered_white)
         
         # 4. Smooth the mask edges for blending
         if np.any(label_mask > 0):
@@ -372,7 +391,7 @@ class ImageProcessorV2:
             label_mask = np.clip(label_mask, 0, 1)
         
         coverage = np.mean(label_mask) * 100
-        logger.info(f"Label detection: {coverage:.1f}% of image protected")
+        logger.info(f"Label detection: {len(label_candidates)} label(s), {coverage:.1f}% of image protected")
         
         return label_mask
     
@@ -488,18 +507,22 @@ class ImageProcessorV2:
             return img_array
         return cv2.fastNlMeansDenoisingColored(img_array, None, strength, strength, 7, 21)
     
-    def enhance_image(self, img):
+    def enhance_image(self, img, skip_label=False):
         """
         Advanced tire image enhancement with intelligent label protection.
         
         Pipeline:
-        1. Detect label regions
+        1. Detect label regions (skipped for side images)
         2. Apply CLAHE for local contrast (tread detail)
         3. Lift shadows
         4. Color correction
         5. Denoise
         6. Sharpen (only tire, not label)
         7. Blend: enhanced tire + fully protected labels
+        
+        Args:
+            img: PIL Image
+            skip_label: If True, skip label detection (for side images)
         """
         has_alpha = img.mode == 'RGBA'
         
@@ -515,7 +538,11 @@ class ImageProcessorV2:
         original_array = np.array(rgb_img, dtype=np.uint8)
         
         # Step 1: Detect label regions (pass alpha for better detection)
-        label_mask = self.detect_label_regions(original_array, alpha_array)
+        if skip_label:
+            logger.info("Skipping label detection (side image)")
+            label_mask = np.zeros((original_array.shape[0], original_array.shape[1]), dtype=np.float32)
+        else:
+            label_mask = self.detect_label_regions(original_array, alpha_array)
         tire_mask = 1.0 - label_mask
         
         # Step 2: Create enhanced version for tire areas
@@ -673,16 +700,23 @@ class ImageProcessorV2:
     
     # ==================== MAIN PIPELINE ====================
     
-    def process(self, image_data, bg_method=None):
-        """Full processing pipeline."""
+    def process(self, image_data, bg_method=None, image_type='front'):
+        """Full processing pipeline.
+        
+        Args:
+            image_data: Raw image bytes
+            bg_method: Background removal method
+            image_type: 'front' (detect 1 label), 'side' (no label detection), 'gauge'
+        """
         # Step 1: Remove background
         no_bg_image = self.remove_background(image_data, method=bg_method)
         
         # Step 2: Crop to square
         square_img = self.crop_to_square(no_bg_image)
         
-        # Step 3: Enhance
-        enhanced_img = self.enhance_image(square_img)
+        # Step 3: Enhance (skip label detection for side images)
+        skip_label = (image_type == 'side')
+        enhanced_img = self.enhance_image(square_img, skip_label=skip_label)
         
         # Step 4: Save as high-quality JPEG
         output = BytesIO()

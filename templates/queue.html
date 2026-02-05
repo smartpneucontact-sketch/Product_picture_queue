@@ -112,6 +112,8 @@
         .btn-primary:hover { background: #45a049; }
         .btn-secondary { background: #444; color: white; }
         .btn-secondary:hover { background: #555; }
+        .btn-warning { background: #ff9800; color: white; }
+        .btn-warning:hover { background: #f57c00; }
         .btn-danger { background: #f44336; color: white; }
         .btn-danger:hover { background: #d32f2f; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -713,6 +715,7 @@
                         </div>
                         <div class="image-actions" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
                             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); startManualGaugeCrop(${img.id})" title="Click on gauge to crop">📏 Gauge</button>
+                            <button class="btn btn-sm ${img.image_type === 'side' ? 'btn-warning' : 'btn-secondary'}" onclick="event.stopPropagation(); toggleSide(${img.id})" title="Mark as side picture (no label detection)">${img.image_type === 'side' ? '🔄 Side ✓' : '🔄 Side'}</button>
                             ${img.status === 'failed' ? `
                                 <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); retryImage(${img.id})">Retry</button>
                             ` : ''}
@@ -989,6 +992,22 @@
                 }
             } catch (error) {
                 showToast('Retry failed', 'error');
+            }
+        }
+        
+        async function toggleSide(id) {
+            try {
+                const response = await fetch(`/api/images/${id}/mark-side`, { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    const type = result.image_type;
+                    showToast(type === 'side' ? 'Marked as side (no label detection)' : 'Marked as front', 'success');
+                    loadImages();
+                } else {
+                    showToast(result.error || 'Failed to toggle', 'error');
+                }
+            } catch (error) {
+                showToast('Toggle failed', 'error');
             }
         }
         
