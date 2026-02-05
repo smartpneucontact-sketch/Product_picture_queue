@@ -469,6 +469,7 @@ def process_images(image_ids, app, upload_to_shopify=True):
                 processed_urls.append(processed_url)
                 
             except Exception as e:
+                logger.error(f"Processing failed for image {image.id}: {e}")
                 image.status = 'failed'
                 image.error_message = str(e)
                 db.session.commit()
@@ -486,6 +487,7 @@ def process_images(image_ids, app, upload_to_shopify=True):
                 db.session.commit()
                 
             except Exception as e:
+                logger.error(f"Shopify upload failed for SKU {sku}: {e}")
                 for image in images:
                     if image.status == 'processed':
                         image.status = 'failed'
