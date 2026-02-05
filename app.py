@@ -7,8 +7,8 @@ from processing_v2 import ImageProcessor
 from shopify_client import ShopifyClient
 import threading
 import numpy as np
-
 import logging
+
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)

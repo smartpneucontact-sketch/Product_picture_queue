@@ -88,10 +88,18 @@ class ImageProcessorV2:
         try:
             response = requests.post(url, headers=headers, files=files, timeout=60)
             if response.status_code == 200:
-                logger.info(f"Poof API success - {len(response.content)} bytes")
-                return response.content
+                # Validate response is actually an image (PNG starts with specific bytes)
+                content = response.content
+                if len(content) < 1000:
+                    logger.error(f"Poof API returned too little data: {len(content)} bytes - {content[:200]}")
+                    raise Exception(f"Poof API returned invalid data: {content[:200]}")
+                if not (content[:4] == b'\x89PNG' or content[:2] == b'\xff\xd8'):
+                    logger.error(f"Poof API returned non-image data: {content[:100]}")
+                    raise Exception(f"Poof API returned non-image: {content[:100]}")
+                logger.info(f"Poof API success - {len(content)} bytes")
+                return content
             else:
-                logger.error(f"Poof API error: {response.status_code}")
+                logger.error(f"Poof API error: {response.status_code} - {response.text[:200]}")
                 raise Exception(f"Poof API error: {response.status_code}")
         except requests.exceptions.Timeout:
             raise Exception("Poof API timeout")
@@ -1139,17 +1147,16 @@ class ImageProcessorV2:
                 
                 if best_circle and best_dist < 100:
                     dcx, dcy, dr = best_circle
-                    # Create restore mask: full gauge including black casing/bezel
-                    # The casing extends ~15-20% beyond the detected white dial face
-                    casing_r = int(dr * 1.2)
+                    # Create restore mask: tight circle around actual dial face + small margin
+                    # Plus the gauge body/stem below the dial
                     dial_restore_mask = np.zeros((crop_h, crop_w), np.uint8)
-                    cv2.circle(dial_restore_mask, (dcx, dcy), casing_r, 255, -1)
+                    cv2.circle(dial_restore_mask, (dcx, dcy), dr + 8, 255, -1)
                     # Add stem area below dial (rectangular, extends down into tire)
                     stem_w = max(dr // 2, 15)
                     cv2.rectangle(dial_restore_mask, 
                                   (dcx - stem_w, dcy + dr - 5), 
                                   (dcx + stem_w, min(crop_h, dcy + dr + int(dr * 2.5))), 255, -1)
-                    logger.debug(f"Dial restore: circle ({dcx},{dcy}) r={casing_r} (face={dr}), stem below")
+                    logger.debug(f"Dial restore: circle ({dcx},{dcy}) r={dr+8}, stem below")
         
         # Label connected components
         num_labels, labels = cv2.connectedComponents(potential_bg, connectivity=8)
@@ -1197,18 +1204,13 @@ class ImageProcessorV2:
                        whitened.astype(np.float32) * (1 - restore_3ch))
             whitened = np.clip(whitened, 0, 255).astype(np.uint8)
         
+        crop_img = Image.fromarray(whitened)
         logger.info(f"Backdrop whitening: {len(border_labels)} edge regions, {np.mean(bg_binary > 0)*100:.0f}% coverage")
         
-        # Step 3: Dial-aware adaptive enhancement (before resize for best quality)
-        if gauge_type == 'dial':
-            whitened = self._enhance_dial_face(whitened, cx - x1, cy - y1, dial_radius)
-        
-        crop_img = Image.fromarray(whitened)
-        
-        # Step 4: Resize to output size
+        # Step 3: Resize to output size
         crop_img = crop_img.resize((output_size, output_size), Image.Resampling.LANCZOS)
         
-        # Step 5: Global enhancement (gentle — heavy lifting done per-region above)
+        # Step 3: Enhance for readability
         crop_img = ImageEnhance.Sharpness(crop_img).enhance(1.3)
         crop_img = ImageEnhance.Contrast(crop_img).enhance(1.05)
         
@@ -1220,142 +1222,6 @@ class ImageProcessorV2:
         msg = f"Gauge closeup ({gauge_type}) from ({cx},{cy}), confidence={conf:.2f}"
         logger.info(msg)
         return output.getvalue(), msg
-    
-    def _enhance_dial_face(self, img_array, dial_cx, dial_cy, dial_radius):
-        """
-        Adaptive enhancement of the dial gauge face region.
-        
-        Casing-aware: detects the black bezel ring around the dial face and:
-        - Applies brightness/CLAHE to the white dial face only
-        - Darkens needle/numbers only INSIDE the face (not the bezel)
-        - Boosts saturation across full gauge (face + colored band + bezel)
-        
-        Gauge structure (from center outward):
-        - 0 to r: white dial face (detected by HoughCircles)
-        - ~r*0.85 to r: colored band (green/red/yellow arc markings)
-        - r to ~r*1.15: dark metallic bezel/casing
-        - ~r*1.15+: chrome rim / backdrop
-        """
-        h, w = img_array.shape[:2]
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        
-        # Re-detect the dial circle precisely in the current crop
-        search_r = int(dial_radius * 3)
-        sy1 = max(0, dial_cy - search_r)
-        sy2 = min(h, dial_cy + search_r)
-        sx1 = max(0, dial_cx - search_r)
-        sx2 = min(w, dial_cx + search_r)
-        roi_gray = gray[sy1:sy2, sx1:sx2]
-        
-        blurred = cv2.GaussianBlur(roi_gray, (9, 9), 2)
-        circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=30,
-                                    param1=100, param2=30, minRadius=max(10, dial_radius - 20),
-                                    maxRadius=dial_radius + 30)
-        
-        found_cx, found_cy, found_r = dial_cx, dial_cy, dial_radius
-        if circles is not None:
-            roi_cx, roi_cy = dial_cx - sx1, dial_cy - sy1
-            best_dist = float('inf')
-            for c in circles[0]:
-                dcx, dcy, dr = int(c[0]), int(c[1]), int(c[2])
-                dist = ((dcx - roi_cx)**2 + (dcy - roi_cy)**2)**0.5
-                if dist < best_dist:
-                    best_dist = dist
-                    found_cx = sx1 + dcx
-                    found_cy = sy1 + dcy
-                    found_r = dr
-        
-        # === Create layered masks ===
-        # Inner face: for dark feature enhancement (exclude colored band edge)
-        inner_r = int(found_r * 0.88)
-        inner_mask = np.zeros((h, w), np.uint8)
-        cv2.circle(inner_mask, (found_cx, found_cy), inner_r, 255, -1)
-        
-        # Dial face: for brightness/CLAHE (the white face HoughCircles detected)
-        face_mask = np.zeros((h, w), np.uint8)
-        cv2.circle(face_mask, (found_cx, found_cy), found_r, 255, -1)
-        face_soft = np.zeros((h, w), np.float32)
-        cv2.circle(face_soft, (found_cx, found_cy), found_r, 1.0, -1)
-        face_soft = cv2.GaussianBlur(face_soft, (15, 15), 0)
-        
-        # Full gauge: for saturation boost (includes colored band + casing)
-        casing_r = int(found_r * 1.15)
-        gauge_soft = np.zeros((h, w), np.float32)
-        cv2.circle(gauge_soft, (found_cx, found_cy), casing_r, 1.0, -1)
-        gauge_soft = cv2.GaussianBlur(gauge_soft, (15, 15), 0)
-        
-        # Measure dial face stats (inside the white face only)
-        dial_pixels = gray[face_mask > 0]
-        mean_bright = np.mean(dial_pixels)
-        p95 = np.percentile(dial_pixels, 95)
-        p5 = np.percentile(dial_pixels, 5)
-        
-        enhanced = img_array.copy()
-        
-        # === 1. Adaptive tone mapping (face only) ===
-        if mean_bright > 185:
-            dial_region = enhanced.astype(np.float32)
-            gamma = 1.0 + (mean_bright - 185) / 100.0
-            gamma = min(gamma, 1.6)
-            normalized = dial_region / 255.0
-            corrected = np.power(normalized, gamma) * 255.0
-            mask_3ch = face_soft[:, :, np.newaxis]
-            enhanced = (corrected * mask_3ch + dial_region * (1 - mask_3ch))
-            enhanced = np.clip(enhanced, 0, 255).astype(np.uint8)
-            logger.info(f"Dial tone: bright ({mean_bright:.0f}), gamma={gamma:.2f}")
-        elif mean_bright < 160:
-            target = 185.0
-            factor = np.clip(target / max(mean_bright, 30), 0.8, 1.8)
-            dial_region = enhanced.astype(np.float32)
-            brightened = np.clip(dial_region * factor, 0, 255)
-            mask_3ch = face_soft[:, :, np.newaxis]
-            enhanced = (brightened * mask_3ch + dial_region * (1 - mask_3ch))
-            enhanced = np.clip(enhanced, 0, 255).astype(np.uint8)
-            logger.info(f"Dial tone: dim ({mean_bright:.0f}), boost x{factor:.2f}")
-        else:
-            logger.info(f"Dial tone: good ({mean_bright:.0f}), no brightness change")
-        
-        # === 2. CLAHE for local contrast (face only) ===
-        lab = cv2.cvtColor(enhanced, cv2.COLOR_RGB2LAB)
-        l_channel = lab[:, :, 0]
-        
-        dial_contrast = p95 - p5
-        clip_limit = 4.0 if dial_contrast < 120 else 3.0
-        
-        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(4, 4))
-        l_enhanced = clahe.apply(l_channel)
-        
-        l_blended = (l_enhanced.astype(np.float32) * face_soft + 
-                     l_channel.astype(np.float32) * (1 - face_soft))
-        lab[:, :, 0] = np.clip(l_blended, 0, 255).astype(np.uint8)
-        enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
-        
-        # === 3. Darken needle/numbers (inner face only, excludes bezel) ===
-        gray_enh = cv2.cvtColor(enhanced, cv2.COLOR_RGB2GRAY)
-        
-        # Only look for dark features inside the inner face (not bezel)
-        inner_pixels = gray_enh[inner_mask > 0]
-        if len(inner_pixels) > 0:
-            dark_threshold = np.mean(inner_pixels) - 30
-            dark_feature_mask = ((gray_enh < dark_threshold) & (inner_mask > 0)).astype(np.float32)
-            dark_feature_mask = cv2.GaussianBlur(dark_feature_mask, (5, 5), 0)
-            
-            for c in range(3):
-                channel = enhanced[:, :, c].astype(np.float32)
-                darkened = channel * 0.7
-                enhanced[:, :, c] = np.clip(
-                    channel * (1 - dark_feature_mask) + darkened * dark_feature_mask,
-                    0, 255
-                ).astype(np.uint8)
-        
-        # === 4. Saturation boost (full gauge including colored band + casing) ===
-        hsv = cv2.cvtColor(enhanced, cv2.COLOR_RGB2HSV).astype(np.float32)
-        sat_boosted = np.clip(hsv[:, :, 1] * 1.4, 0, 255)
-        hsv[:, :, 1] = (sat_boosted * gauge_soft + hsv[:, :, 1] * (1 - gauge_soft))
-        enhanced = cv2.cvtColor(np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2RGB)
-        
-        logger.info(f"Dial enhancement: mean={mean_bright:.0f}, inner_r={inner_r}, face_r={found_r}, casing_r={casing_r}")
-        return enhanced
 
 
 ImageProcessor = ImageProcessorV2
