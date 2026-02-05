@@ -871,59 +871,24 @@ class ImageProcessorV2:
                     'score': min(area, 500)
                 })
         
-        # === Signal 3: Mechanical dial gauge (circular, bright face) ===
-        # Always run - dial gauge may be present even when blue tips are found on tread
-        blurred = cv2.GaussianBlur(gray[:search_h, :], (9, 9), 2)
-        circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=50,
-                                    param1=100, param2=40, minRadius=15, maxRadius=100)
-        if circles is not None:
-            circles_arr = np.round(circles[0]).astype(int)
-            for cx, cy, r in circles_arr:
-                # Dial face should be bright with low saturation
-                mask = np.zeros(gray[:search_h, :].shape, np.uint8)
-                cv2.circle(mask, (cx, cy), r, 255, -1)
-                mean_bright = np.mean(gray[:search_h, :][mask > 0])
-                mean_sat = np.mean(hsv[:search_h, :, 1][mask > 0])
-                
-                if mean_bright > 150 and mean_sat < 80:
-                    # Center bias
-                    cx_norm = cx / w
-                    center_dist = abs(cx_norm - 0.5) * 2
-                    center_score = 1.0 - center_dist * 0.5
-                    
-                    # Must be in central area horizontally
-                    if cx < w * 0.2 or cx > w * 0.8:
-                        continue
-                    
-                    # Dial gauge sits on top of tire tread - must be in upper 40%
-                    if cy > h * 0.40:
-                        continue
-                    
-                    candidates.append({
-                        'type': 'dial',
-                        'cx': cx, 'cy': cy,
-                        'radius': r,
-                        'score': mean_bright * center_score * 0.5
-                    })
-                    logger.debug(f"Dial candidate: ({cx},{cy}) r={r}, bright={mean_bright:.0f}, sat={mean_sat:.0f}")
-        
         if not candidates:
             return None
         
-        # Filter: candidates should be in the central-upper area of the image
+        # Filter: LCD candidates should be in the central-upper area of the image
+        # (the gauge is always on the tire which is roughly centered)
         filtered = []
         for c in candidates:
             if c['type'] == 'lcd':
+                # LCD should be in center 70% horizontally
                 if c['cx'] < w * 0.15 or c['cx'] > w * 0.85:
                     continue
+                # LCD should be in upper 50% of image
                 if c['cy'] > h * 0.50:
                     continue
             if c['type'] == 'blue_tip':
+                # Blue tip also in center area
                 if c['cx'] < w * 0.2 or c['cx'] > w * 0.8:
                     continue
-            if c['type'] == 'dial':
-                # Dial already filtered during detection
-                pass
             filtered.append(c)
         
         if not filtered:
@@ -931,45 +896,47 @@ class ImageProcessorV2:
         
         candidates = filtered
         
-        # Combine signals: LCD + blue tip (digital) OR dial (mechanical)
+        # Combine signals: need at least LCD; blue tip boosts confidence
         lcds = [c for c in candidates if c['type'] == 'lcd']
         tips = [c for c in candidates if c['type'] == 'blue_tip']
-        dials = [c for c in candidates if c['type'] == 'dial']
         
-        # Try digital gauge first (LCD candidates)
-        if lcds:
-            # Filter out clusters of LCD candidates that look like label text rows
-            if len(lcds) >= 2:
-                lcds_sorted = sorted(lcds, key=lambda c: c['cy'])
-                y_spread = lcds_sorted[-1]['cy'] - lcds_sorted[0]['cy']
-                if y_spread > 120:
-                    logger.info(f"LCD candidates spread {y_spread}px vertically - likely label text")
-                    lcds = []  # Reject LCD, may still have dial
+        # Must have at least one LCD candidate
+        if not lcds:
+            return None
+        
+        # Filter out clusters of LCD candidates that look like label text rows
+        # (multiple text rows spread over a large vertical area on a label)
+        # vs gauge LCD segments (multiple detections on the same small LCD screen)
+        if len(lcds) >= 2:
+            lcds_sorted = sorted(lcds, key=lambda c: c['cy'])
+            y_spread = lcds_sorted[-1]['cy'] - lcds_sorted[0]['cy']
+            x_spread = max(c['cx'] for c in lcds) - min(c['cx'] for c in lcds)
             
-            if lcds:
-                best_score = 0
-                best_pos = None
-                for lcd in lcds:
-                    score = lcd['score']
-                    for tip in tips:
-                        dist = ((lcd['cx'] - tip['cx'])**2 + (lcd['cy'] - tip['cy'])**2)**0.5
-                        if dist < 250:
-                            score += tip['score'] * 2
-                    if score > best_score:
-                        best_score = score
-                        best_pos = (lcd['cx'], lcd['cy'])
-                
-                if best_pos:
-                    confidence = min(best_score / 100, 1.0)
-                    logger.info(f"Digital gauge at ({best_pos[0]},{best_pos[1]}), confidence={confidence:.2f}")
-                    return (best_pos[0], best_pos[1], confidence, 'digital')
+            # Gauge LCD: tight cluster (< 100px vertical spread, < 150px horizontal)
+            # Label text: wider spread (> 150px vertical, multiple text rows)
+            if y_spread > 120:
+                # Wide vertical spread = label text rows, reject all
+                logger.info(f"LCD candidates spread {y_spread}px vertically - likely label text")
+                return None
+            # else: tight cluster = same gauge LCD, use their centroid
         
-        # Try mechanical dial gauge
-        if dials:
-            best_dial = max(dials, key=lambda c: c['score'])
-            confidence = min(best_dial['score'] / 100, 1.0)
-            logger.info(f"Dial gauge at ({best_dial['cx']},{best_dial['cy']}), r={best_dial.get('radius',0)}, confidence={confidence:.2f}")
-            return (best_dial['cx'], best_dial['cy'], confidence, 'dial', best_dial.get('radius', 40))
+        best_score = 0
+        best_pos = None
+        
+        for lcd in lcds:
+            score = lcd['score']
+            for tip in tips:
+                dist = ((lcd['cx'] - tip['cx'])**2 + (lcd['cy'] - tip['cy'])**2)**0.5
+                if dist < 250:
+                    score += tip['score'] * 2
+            if score > best_score:
+                best_score = score
+                best_pos = (lcd['cx'], lcd['cy'])
+        
+        if best_pos:
+            confidence = min(best_score / 100, 1.0)
+            logger.info(f"Gauge detected at ({best_pos[0]},{best_pos[1]}), confidence={confidence:.2f}")
+            return (best_pos[0], best_pos[1], confidence)
         
         return None
     
@@ -998,7 +965,7 @@ class ImageProcessorV2:
         if isinstance(image_data, bytes):
             img = Image.open(BytesIO(image_data)).convert('RGB')
         elif isinstance(image_data, Image.Image):
-            img = image_data if image_data.mode == 'RGB' else image_data.convert('RGB')
+            img = img if img.mode == 'RGB' else img.convert('RGB')
         else:
             img = image_data
         
@@ -1009,75 +976,19 @@ class ImageProcessorV2:
             result = self.detect_gauge(img_array)
             if result is None:
                 return None, "No gauge detected in image"
-            cx, cy, conf = result[0], result[1], result[2]
-            gauge_type = result[3] if len(result) > 3 else 'digital'
-            dial_radius = result[4] if len(result) > 4 else 40
+            cx, cy, conf = result
             if conf < 0.5:
                 return None, f"Low confidence gauge detection ({conf:.2f})"
         else:
             cx, cy = gauge_xy
             conf = 1.0
-            dial_radius = 40  # default
-            
-            # Try to detect dial circle near click point (mechanical gauge)
-            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-            hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
-            search_r = int(min(w, h) * 0.15)
-            sy1 = max(0, cy - search_r)
-            sy2 = min(h, cy + search_r)
-            sx1 = max(0, cx - search_r)
-            sx2 = min(w, cx + search_r)
-            roi = gray[sy1:sy2, sx1:sx2]
-            
-            blurred = cv2.GaussianBlur(roi, (9, 9), 2)
-            circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=30,
-                                        param1=100, param2=30, minRadius=15, maxRadius=int(search_r*0.8))
-            
-            gauge_type = 'manual'
-            if circles is not None:
-                # Find the circle closest to click point (center of ROI)
-                roi_cx, roi_cy = cx - sx1, cy - sy1
-                best_dist = float('inf')
-                for c in circles[0]:
-                    dcx, dcy, dr = int(c[0]), int(c[1]), int(c[2])
-                    # Check brightness (dial face is white)
-                    mask = np.zeros(roi.shape, np.uint8)
-                    cv2.circle(mask, (dcx, dcy), dr, 255, -1)
-                    mean_bright = np.mean(roi[mask > 0])
-                    mean_sat = np.mean(hsv[sy1:sy2, sx1:sx2, 1][mask > 0])
-                    if mean_bright > 140 and mean_sat < 90:
-                        dist = ((dcx - roi_cx)**2 + (dcy - roi_cy)**2)**0.5
-                        if dist < best_dist:
-                            best_dist = dist
-                            dial_radius = dr
-                            # Snap to circle center
-                            cx = sx1 + dcx
-                            cy = sy1 + dcy
-                            gauge_type = 'dial'
-                
-                if gauge_type == 'dial':
-                    logger.info(f"Manual click snapped to dial: ({cx},{cy}) r={dial_radius}")
         
         # Step 1: Tight crop around gauge
-        min_dim = min(w, h)
-        
-        if gauge_type == 'dial':
-            # Dial gauge: use detected radius to size crop so dial is readable
-            # We want the dial to be ~25-30% of the crop width
-            target_dial_pct = 0.28  # Dial should be 28% of crop width
-            ideal_side = int(2 * dial_radius / target_dial_pct)
-            # Clamp to reasonable range
-            ideal_side = max(ideal_side, int(min_dim * 0.12))
-            ideal_side = min(ideal_side, int(min_dim * 0.30))
-            
-            crop_radius_x = ideal_side // 2
-            crop_radius_up = int(dial_radius * 2.0)   # Just enough above dial cap
-            crop_radius_down = int(ideal_side * 0.7)   # More below for tread
-        else:
-            # Digital gauge or manual: hand present, LCD center
-            crop_radius_x = int(min_dim * 0.18)
-            crop_radius_up = int(min_dim * 0.20)   # More room above (hand)
-            crop_radius_down = int(min_dim * 0.10)  # Less below (avoid label)
+        # Focus on gauge + hand + tire tread only, NOT the label below
+        # The gauge LCD is the center point, hand comes from above/side
+        crop_radius_x = int(min(w, h) * 0.18)  # Horizontal span
+        crop_radius_up = int(min(w, h) * 0.20)   # More room above (hand)
+        crop_radius_down = int(min(w, h) * 0.10)  # Less below (avoid label)
         
         x1 = max(0, cx - crop_radius_x)
         y1 = max(0, cy - crop_radius_up)
@@ -1115,40 +1026,6 @@ class ImageProcessorV2:
         
         # Find all bright pixel regions (potential backdrop)
         potential_bg = (gray_crop > 150).astype(np.uint8) * 255
-        
-        # For dial gauges: detect the exact dial face circle in the crop
-        # We'll restore it AFTER whitening instead of blocking whitening
-        dial_restore_mask = None
-        if gauge_type == 'dial':
-            dial_cx_crop = cx - x1
-            dial_cy_crop = cy - y1
-            # Find the precise dial circle in the crop using HoughCircles
-            blurred_crop = cv2.GaussianBlur(gray_crop, (9, 9), 2)
-            dial_circles = cv2.HoughCircles(blurred_crop, cv2.HOUGH_GRADIENT, dp=1.2, minDist=30,
-                                             param1=100, param2=30, minRadius=15, maxRadius=int(min(crop_h, crop_w)*0.2))
-            if dial_circles is not None:
-                # Find the circle closest to expected dial position
-                best_circle = None
-                best_dist = float('inf')
-                for dc in dial_circles[0]:
-                    dcx, dcy, dr = int(dc[0]), int(dc[1]), int(dc[2])
-                    dist = ((dcx - dial_cx_crop)**2 + (dcy - dial_cy_crop)**2)**0.5
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_circle = (dcx, dcy, dr)
-                
-                if best_circle and best_dist < 100:
-                    dcx, dcy, dr = best_circle
-                    # Create restore mask: tight circle around actual dial face + small margin
-                    # Plus the gauge body/stem below the dial
-                    dial_restore_mask = np.zeros((crop_h, crop_w), np.uint8)
-                    cv2.circle(dial_restore_mask, (dcx, dcy), dr + 8, 255, -1)
-                    # Add stem area below dial (rectangular, extends down into tire)
-                    stem_w = max(dr // 2, 15)
-                    cv2.rectangle(dial_restore_mask, 
-                                  (dcx - stem_w, dcy + dr - 5), 
-                                  (dcx + stem_w, min(crop_h, dcy + dr + int(dr * 2.5))), 255, -1)
-                    logger.debug(f"Dial restore: circle ({dcx},{dcy}) r={dr+8}, stem below")
         
         # Label connected components
         num_labels, labels = cv2.connectedComponents(potential_bg, connectivity=8)
@@ -1188,14 +1065,6 @@ class ImageProcessorV2:
         whitened = crop_f * (1 - combined_mask[:,:,np.newaxis]) + white * combined_mask[:,:,np.newaxis]
         whitened = np.clip(whitened, 0, 255).astype(np.uint8)
         
-        # For dial gauges: restore the dial face from original over the whitened result
-        if dial_restore_mask is not None:
-            restore_float = cv2.GaussianBlur(dial_restore_mask.astype(np.float32) / 255, (11, 11), 0)
-            restore_3ch = restore_float[:,:,np.newaxis]
-            whitened = (crop.astype(np.float32) * restore_3ch + 
-                       whitened.astype(np.float32) * (1 - restore_3ch))
-            whitened = np.clip(whitened, 0, 255).astype(np.uint8)
-        
         crop_img = Image.fromarray(whitened)
         logger.info(f"Backdrop whitening: {len(border_labels)} edge regions, {np.mean(bg_binary > 0)*100:.0f}% coverage")
         
@@ -1211,7 +1080,7 @@ class ImageProcessorV2:
         crop_img.save(output, format='JPEG', quality=98, subsampling=0)
         output.seek(0)
         
-        msg = f"Gauge closeup ({gauge_type}) from ({cx},{cy}), confidence={conf:.2f}"
+        msg = f"Gauge closeup from ({cx},{cy}), confidence={conf:.2f}"
         logger.info(msg)
         return output.getvalue(), msg
 

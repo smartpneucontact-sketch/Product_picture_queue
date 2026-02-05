@@ -383,14 +383,12 @@ def gauge_detect():
                 'message': 'No gauge found'
             })
         
-        cx, cy, conf = result[0], result[1], result[2]
-        gauge_type = result[3] if len(result) > 3 else 'digital'
+        cx, cy, conf = result
         return jsonify({
             'detected': True,
             'x': cx,
             'y': cy,
             'confidence': round(conf, 2),
-            'gauge_type': gauge_type,
             'image_width': img.size[0],
             'image_height': img.size[1]
         })
@@ -435,9 +433,7 @@ def process_images(image_ids, app, upload_to_shopify=True):
         processor = get_processor()
         storage = get_storage()
         
-        # Fetch images and preserve the order from frontend
-        images_map = {img.id: img for img in Image.query.filter(Image.id.in_(image_ids)).all()}
-        images = [images_map[id] for id in image_ids if id in images_map]
+        images = Image.query.filter(Image.id.in_(image_ids)).all()
         
         if not images:
             return

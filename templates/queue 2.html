@@ -148,9 +148,8 @@
         .day-section {
             background: #252540;
             border-radius: 12px;
-            margin-bottom: 24px;
+            margin-bottom: 15px;
             overflow: hidden;
-            border: 1px solid #333;
         }
         
         .day-header {
@@ -160,8 +159,6 @@
             justify-content: space-between;
             align-items: center;
             transition: background 0.2s;
-            background: linear-gradient(135deg, #2a2a50, #252540);
-            border-bottom: 2px solid #4CAF50;
         }
         
         .day-header:hover { background: #2a2a4e; }
@@ -246,24 +243,6 @@
             height: 24px;
             accent-color: #4CAF50;
             cursor: pointer;
-        }
-        
-        .image-card .order-badge {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            z-index: 10;
-            width: 30px;
-            height: 30px;
-            background: #4CAF50;
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 14px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
         }
         
         .image-compare {
@@ -591,7 +570,6 @@
         // State
         let allImages = [];
         let selectedIds = new Set();
-        let selectionOrder = []; // Track order of selection for upload numbering
         let currentFilter = '';
         let openDays = new Set(); // Track which days are open
         
@@ -680,12 +658,10 @@
         
         function renderImageCard(img) {
             const isSelected = selectedIds.has(img.id);
-            const orderNum = selectionOrder.indexOf(img.id);
             return `
                 <div class="image-card ${isSelected ? 'selected' : ''}" data-id="${img.id}">
                     <input type="checkbox" class="checkbox" ${isSelected ? 'checked' : ''} 
                            onchange="toggleSelect(${img.id}, this.checked)">
-                    ${isSelected && orderNum >= 0 ? `<div class="order-badge">${orderNum + 1}</div>` : ''}
                     <div class="image-compare">
                         <div class="img-wrapper">
                             <img src="${img.original_url}" alt="Original" loading="lazy" 
@@ -711,7 +687,8 @@
                                class="${img.processed_url ? '' : 'disabled'}">⬇ Processed</a>
                         </div>
                         <div class="image-actions" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); startManualGaugeCrop(${img.id})" title="Click on gauge to crop">📏 Gauge</button>
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); gaugeCrop(${img.id}, this)" title="Auto-detect gauge and create closeup">Auto Gauge</button>
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); startManualGaugeCrop(${img.id})" title="Click on gauge to crop manually">Manual Gauge</button>
                             ${img.status === 'failed' ? `
                                 <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); retryImage(${img.id})">Retry</button>
                             ` : ''}
@@ -743,12 +720,8 @@
             day.images.forEach(img => {
                 if (allSelected) {
                     selectedIds.delete(img.id);
-                    selectionOrder = selectionOrder.filter(x => x !== img.id);
                 } else {
-                    if (!selectedIds.has(img.id)) {
-                        selectedIds.add(img.id);
-                        selectionOrder.push(img.id);
-                    }
+                    selectedIds.add(img.id);
                 }
             });
             
@@ -759,14 +732,13 @@
         function toggleSelect(id, checked) {
             if (checked) {
                 selectedIds.add(id);
-                if (!selectionOrder.includes(id)) selectionOrder.push(id);
             } else {
                 selectedIds.delete(id);
-                selectionOrder = selectionOrder.filter(x => x !== id);
             }
             
-            // Re-render to update order badges
-            renderDays();
+            const card = document.querySelector(`.image-card[data-id="${id}"]`);
+            if (card) card.classList.toggle('selected', checked);
+            
             updateSelectionUI();
         }
         
@@ -779,7 +751,7 @@
             document.getElementById('deleteBtn').disabled = count === 0;
             
             // Enable processDrafts only if any selected images are drafts
-            const hasDrafts = selectionOrder.filter(id => selectedIds.has(id)).some(id => {
+            const hasDrafts = Array.from(selectedIds).some(id => {
                 const img = allImages.find(i => i.id === id);
                 return img && img.status === 'draft';
             });
@@ -855,7 +827,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        image_ids: selectionOrder.filter(id => selectedIds.has(id)),
+                        image_ids: Array.from(selectedIds),
                         sku: sku
                     })
                 });
@@ -863,7 +835,7 @@
                 const result = await response.json();
                 if (result.success) {
                     showToast(result.message, 'success');
-                    selectedIds.clear(); selectionOrder = [];
+                    selectedIds.clear();
                     document.getElementById('skuInput').value = '';
                     loadImages();
                 } else {
@@ -879,13 +851,13 @@
                 const response = await fetch('/api/process', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_ids: selectionOrder.filter(id => selectedIds.has(id)) })
+                    body: JSON.stringify({ image_ids: Array.from(selectedIds) })
                 });
                 
                 const result = await response.json();
                 if (result.success) {
                     showToast(result.message, 'success');
-                    selectedIds.clear(); selectionOrder = [];
+                    selectedIds.clear();
                     loadImages();
                 } else {
                     showToast(result.error, 'error');
@@ -907,7 +879,7 @@
             }
             
             showToast('Deleted', 'success');
-            selectedIds.clear(); selectionOrder = [];
+            selectedIds.clear();
             loadImages();
         });
         
@@ -924,7 +896,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        image_ids: selectionOrder.filter(id => selectedIds.has(id)),
+                        image_ids: Array.from(selectedIds),
                         sku: sku
                     })
                 });
@@ -932,7 +904,7 @@
                 const result = await response.json();
                 if (result.success) {
                     showToast(result.message, 'success');
-                    selectedIds.clear(); selectionOrder = [];
+                    selectedIds.clear();
                     document.getElementById('skuInput').value = '';
                     loadImages();
                 } else {
@@ -946,7 +918,7 @@
         // Process drafts button
         document.getElementById('processDraftsBtn').addEventListener('click', async () => {
             // Get all selected draft images
-            const draftIds = selectionOrder.filter(id => selectedIds.has(id)).filter(id => {
+            const draftIds = Array.from(selectedIds).filter(id => {
                 const img = allImages.find(i => i.id === id);
                 return img && img.status === 'draft';
             });
@@ -966,7 +938,7 @@
                 const result = await response.json();
                 if (result.success) {
                     showToast(result.message, 'success');
-                    selectedIds.clear(); selectionOrder = [];
+                    selectedIds.clear();
                     loadImages();
                 } else {
                     showToast(result.error, 'error');

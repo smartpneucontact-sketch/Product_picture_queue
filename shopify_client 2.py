@@ -69,8 +69,8 @@ class ShopifyClient:
         
         return product_id, variant_id, product_title
     
-    def get_product_images(self, product_id):
-        """Get all images on a product with their IDs."""
+    def get_product_images_count(self, product_id):
+        """Get current number of images on a product."""
         query = """
         query getProductImages($id: ID!) {
             product(id: $id) {
@@ -89,28 +89,9 @@ class ShopifyClient:
         data = self._graphql(query, {'id': product_gid})
         
         if not data.get('product'):
-            return []
+            return 0
         
-        return [edge['node']['id'] for edge in data['product']['images']['edges']]
-    
-    def get_product_images_count(self, product_id):
-        """Get current number of images on a product."""
-        return len(self.get_product_images(product_id))
-    
-    def delete_product_images(self, product_id, image_gids):
-        """Delete images from a product using REST API."""
-        deleted = 0
-        for gid in image_gids:
-            try:
-                # Extract numeric ID from GID
-                image_id = gid.split('/')[-1]
-                url = f"{self.rest_url}/products/{product_id}/images/{image_id}.json"
-                response = requests.delete(url, headers=self.headers)
-                if response.status_code in [200, 204]:
-                    deleted += 1
-            except Exception:
-                pass
-        return deleted
+        return len(data['product']['images']['edges'])
     
     def add_image_to_product(self, product_id, image_url, position=None, alt_text=None):
         """
@@ -139,8 +120,7 @@ class ShopifyClient:
     
     def add_images_to_product_by_sku(self, sku, image_urls):
         """
-        Replace all images on a product identified by SKU.
-        Deletes existing images first, then uploads new ones in order.
+        Add multiple images to a product identified by SKU.
         Returns the product info and added images.
         """
         product_id, variant_id, product_title = self.find_product_by_sku(sku)
@@ -148,20 +128,15 @@ class ShopifyClient:
         if not product_id:
             raise Exception(f"No product found with SKU: {sku}")
         
-        # Delete existing images first
-        existing_images = self.get_product_images(product_id)
-        if existing_images:
-            deleted = self.delete_product_images(product_id, existing_images)
-            import logging
-            logging.getLogger(__name__).info(f"Deleted {deleted}/{len(existing_images)} existing images for SKU {sku}")
+        # Get current image count to set positions
+        current_image_count = self.get_product_images_count(product_id)
         
-        # Upload new images in order (position 1, 2, 3...)
         added_images = []
         errors = []
         
         for i, image_url in enumerate(image_urls):
             try:
-                position = i + 1
+                position = current_image_count + i + 1
                 image = self.add_image_to_product(
                     product_id, 
                     image_url, 
@@ -180,6 +155,5 @@ class ShopifyClient:
             'product_title': product_title,
             'sku': sku,
             'images_added': len(added_images),
-            'images_deleted': len(existing_images) if existing_images else 0,
             'errors': errors if errors else None
         }
