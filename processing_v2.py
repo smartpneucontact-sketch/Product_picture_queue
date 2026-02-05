@@ -1139,16 +1139,17 @@ class ImageProcessorV2:
                 
                 if best_circle and best_dist < 100:
                     dcx, dcy, dr = best_circle
-                    # Create restore mask: tight circle around actual dial face + small margin
-                    # Plus the gauge body/stem below the dial
+                    # Create restore mask: full gauge including black casing/bezel
+                    # The casing extends ~15-20% beyond the detected white dial face
+                    casing_r = int(dr * 1.2)
                     dial_restore_mask = np.zeros((crop_h, crop_w), np.uint8)
-                    cv2.circle(dial_restore_mask, (dcx, dcy), dr + 8, 255, -1)
+                    cv2.circle(dial_restore_mask, (dcx, dcy), casing_r, 255, -1)
                     # Add stem area below dial (rectangular, extends down into tire)
                     stem_w = max(dr // 2, 15)
                     cv2.rectangle(dial_restore_mask, 
                                   (dcx - stem_w, dcy + dr - 5), 
                                   (dcx + stem_w, min(crop_h, dcy + dr + int(dr * 2.5))), 255, -1)
-                    logger.debug(f"Dial restore: circle ({dcx},{dcy}) r={dr+8}, stem below")
+                    logger.debug(f"Dial restore: circle ({dcx},{dcy}) r={casing_r} (face={dr}), stem below")
         
         # Label connected components
         num_labels, labels = cv2.connectedComponents(potential_bg, connectivity=8)
@@ -1224,11 +1225,16 @@ class ImageProcessorV2:
         """
         Adaptive enhancement of the dial gauge face region.
         
-        Handles both dim AND overexposed dials:
-        - Dim: boost brightness to readable level
-        - Bright/glare: compress highlights to recover needle visibility
-        - Always: CLAHE for local contrast (needle + tick marks pop)
-        - Always: saturation boost for green/red zone visibility
+        Casing-aware: detects the black bezel ring around the dial face and:
+        - Applies brightness/CLAHE to the white dial face only
+        - Darkens needle/numbers only INSIDE the face (not the bezel)
+        - Boosts saturation across full gauge (face + colored band + bezel)
+        
+        Gauge structure (from center outward):
+        - 0 to r: white dial face (detected by HoughCircles)
+        - ~r*0.85 to r: colored band (green/red/yellow arc markings)
+        - r to ~r*1.15: dark metallic bezel/casing
+        - ~r*1.15+: chrome rim / backdrop
         """
         h, w = img_array.shape[:2]
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
@@ -1259,93 +1265,96 @@ class ImageProcessorV2:
                     found_cy = sy1 + dcy
                     found_r = dr
         
-        # Create masks
-        hard_mask = np.zeros((h, w), np.uint8)
-        cv2.circle(hard_mask, (found_cx, found_cy), found_r, 255, -1)
-        soft_mask = np.zeros((h, w), np.float32)
-        cv2.circle(soft_mask, (found_cx, found_cy), found_r, 1.0, -1)
-        soft_mask = cv2.GaussianBlur(soft_mask, (15, 15), 0)
+        # === Create layered masks ===
+        # Inner face: for dark feature enhancement (exclude colored band edge)
+        inner_r = int(found_r * 0.88)
+        inner_mask = np.zeros((h, w), np.uint8)
+        cv2.circle(inner_mask, (found_cx, found_cy), inner_r, 255, -1)
         
-        # Measure dial face stats
-        dial_pixels = gray[hard_mask > 0]
+        # Dial face: for brightness/CLAHE (the white face HoughCircles detected)
+        face_mask = np.zeros((h, w), np.uint8)
+        cv2.circle(face_mask, (found_cx, found_cy), found_r, 255, -1)
+        face_soft = np.zeros((h, w), np.float32)
+        cv2.circle(face_soft, (found_cx, found_cy), found_r, 1.0, -1)
+        face_soft = cv2.GaussianBlur(face_soft, (15, 15), 0)
+        
+        # Full gauge: for saturation boost (includes colored band + casing)
+        casing_r = int(found_r * 1.15)
+        gauge_soft = np.zeros((h, w), np.float32)
+        cv2.circle(gauge_soft, (found_cx, found_cy), casing_r, 1.0, -1)
+        gauge_soft = cv2.GaussianBlur(gauge_soft, (15, 15), 0)
+        
+        # Measure dial face stats (inside the white face only)
+        dial_pixels = gray[face_mask > 0]
         mean_bright = np.mean(dial_pixels)
         p95 = np.percentile(dial_pixels, 95)
         p5 = np.percentile(dial_pixels, 5)
         
         enhanced = img_array.copy()
         
-        # === 1. Adaptive tone mapping ===
+        # === 1. Adaptive tone mapping (face only) ===
         if mean_bright > 185:
-            # BRIGHT / GLARE: compress highlights to recover needle & markings
-            # Use a tone curve that pulls down bright areas while keeping darks
             dial_region = enhanced.astype(np.float32)
-            # Gamma > 1 darkens bright areas, compresses highlight range
-            gamma = 1.0 + (mean_bright - 185) / 100.0  # 1.0-1.7 range
+            gamma = 1.0 + (mean_bright - 185) / 100.0
             gamma = min(gamma, 1.6)
-            # Apply gamma only to dial region
             normalized = dial_region / 255.0
             corrected = np.power(normalized, gamma) * 255.0
-            mask_3ch = soft_mask[:, :, np.newaxis]
+            mask_3ch = face_soft[:, :, np.newaxis]
             enhanced = (corrected * mask_3ch + dial_region * (1 - mask_3ch))
             enhanced = np.clip(enhanced, 0, 255).astype(np.uint8)
-            logger.info(f"Dial tone: bright ({mean_bright:.0f}), gamma={gamma:.2f} to compress highlights")
+            logger.info(f"Dial tone: bright ({mean_bright:.0f}), gamma={gamma:.2f}")
         elif mean_bright < 160:
-            # DIM: boost brightness
-            target = 185.0  # moderate target, not blown out
+            target = 185.0
             factor = np.clip(target / max(mean_bright, 30), 0.8, 1.8)
             dial_region = enhanced.astype(np.float32)
             brightened = np.clip(dial_region * factor, 0, 255)
-            mask_3ch = soft_mask[:, :, np.newaxis]
+            mask_3ch = face_soft[:, :, np.newaxis]
             enhanced = (brightened * mask_3ch + dial_region * (1 - mask_3ch))
             enhanced = np.clip(enhanced, 0, 255).astype(np.uint8)
             logger.info(f"Dial tone: dim ({mean_bright:.0f}), boost x{factor:.2f}")
         else:
             logger.info(f"Dial tone: good ({mean_bright:.0f}), no brightness change")
         
-        # === 2. CLAHE for local contrast (needle and markings visibility) ===
+        # === 2. CLAHE for local contrast (face only) ===
         lab = cv2.cvtColor(enhanced, cv2.COLOR_RGB2LAB)
         l_channel = lab[:, :, 0]
         
-        # Stronger CLAHE when needle is hard to see (low contrast in dial)
         dial_contrast = p95 - p5
         clip_limit = 4.0 if dial_contrast < 120 else 3.0
         
         clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(4, 4))
         l_enhanced = clahe.apply(l_channel)
         
-        l_blended = (l_enhanced.astype(np.float32) * soft_mask + 
-                     l_channel.astype(np.float32) * (1 - soft_mask))
+        l_blended = (l_enhanced.astype(np.float32) * face_soft + 
+                     l_channel.astype(np.float32) * (1 - face_soft))
         lab[:, :, 0] = np.clip(l_blended, 0, 255).astype(np.uint8)
         enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
         
-        # === 3. Sharpen dark features (needle, tick marks, numbers) ===
-        # Unsharp mask targeted at the dial to make thin dark lines pop
+        # === 3. Darken needle/numbers (inner face only, excludes bezel) ===
         gray_enh = cv2.cvtColor(enhanced, cv2.COLOR_RGB2GRAY)
-        blurred_face = cv2.GaussianBlur(gray_enh, (0, 0), 2.0)
-        sharpened_gray = cv2.addWeighted(gray_enh, 1.8, blurred_face, -0.8, 0)
         
-        # Apply sharpening only to dark features within dial (needle, numbers)
-        # Dark features: pixels significantly darker than the dial face mean
-        dark_threshold = np.mean(gray_enh[hard_mask > 0]) - 30
-        dark_feature_mask = ((gray_enh < dark_threshold) & (hard_mask > 0)).astype(np.float32)
-        dark_feature_mask = cv2.GaussianBlur(dark_feature_mask, (5, 5), 0)
+        # Only look for dark features inside the inner face (not bezel)
+        inner_pixels = gray_enh[inner_mask > 0]
+        if len(inner_pixels) > 0:
+            dark_threshold = np.mean(inner_pixels) - 30
+            dark_feature_mask = ((gray_enh < dark_threshold) & (inner_mask > 0)).astype(np.float32)
+            dark_feature_mask = cv2.GaussianBlur(dark_feature_mask, (5, 5), 0)
+            
+            for c in range(3):
+                channel = enhanced[:, :, c].astype(np.float32)
+                darkened = channel * 0.7
+                enhanced[:, :, c] = np.clip(
+                    channel * (1 - dark_feature_mask) + darkened * dark_feature_mask,
+                    0, 255
+                ).astype(np.uint8)
         
-        # Darken the dark features slightly more for contrast
-        for c in range(3):
-            channel = enhanced[:, :, c].astype(np.float32)
-            darkened = channel * 0.7  # make dark features 30% darker
-            enhanced[:, :, c] = np.clip(
-                channel * (1 - dark_feature_mask) + darkened * dark_feature_mask,
-                0, 255
-            ).astype(np.uint8)
-        
-        # === 4. Boost color saturation in dial for green/red zone visibility ===
+        # === 4. Saturation boost (full gauge including colored band + casing) ===
         hsv = cv2.cvtColor(enhanced, cv2.COLOR_RGB2HSV).astype(np.float32)
         sat_boosted = np.clip(hsv[:, :, 1] * 1.4, 0, 255)
-        hsv[:, :, 1] = (sat_boosted * soft_mask + hsv[:, :, 1] * (1 - soft_mask))
+        hsv[:, :, 1] = (sat_boosted * gauge_soft + hsv[:, :, 1] * (1 - gauge_soft))
         enhanced = cv2.cvtColor(np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2RGB)
         
-        logger.info(f"Dial enhancement: mean={mean_bright:.0f}, p5={p5:.0f}, p95={p95:.0f}, CLAHE clip={clip_limit}, dark feature boost applied")
+        logger.info(f"Dial enhancement: mean={mean_bright:.0f}, inner_r={inner_r}, face_r={found_r}, casing_r={casing_r}")
         return enhanced
 
 
