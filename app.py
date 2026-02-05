@@ -450,6 +450,15 @@ def process_images(image_ids, app, upload_to_shopify=True):
         
         for image in images:
             try:
+                # Skip processing if already has a processed image (e.g., gauge closeup)
+                if image.processed_url:
+                    logger.info(f"Image {image.id} already processed, skipping")
+                    processed_urls.append(image.processed_url)
+                    if image.status != 'processed':
+                        image.status = 'processed'
+                        db.session.commit()
+                    continue
+                
                 image.status = 'processing'
                 db.session.commit()
                 
