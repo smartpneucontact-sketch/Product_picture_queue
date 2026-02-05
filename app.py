@@ -517,16 +517,9 @@ def process_images(image_ids, app, upload_to_shopify=True):
         
         for image in images:
             try:
-                # Skip processing only for gauge closeups (manually cropped)
-                # Check both image_type and filename/URL (for older gauge images)
-                is_gauge = (image.image_type == 'gauge' or 
-                           (image.processed_url and 'gauge_' in image.processed_url) or
-                           (image.original_filename and image.original_filename.startswith('gauge_')))
-                
-                logger.info(f"Image {image.id}: type={image.image_type}, has_processed={bool(image.processed_url)}, is_gauge={is_gauge}")
-                
-                if image.processed_url and is_gauge:
-                    logger.info(f"Image {image.id} is gauge closeup, skipping reprocess")
+                # Skip processing if already has a processed image
+                if image.processed_url:
+                    logger.info(f"Image {image.id} already processed, using existing")
                     processed_urls.append(image.processed_url)
                     if image.status != 'processed':
                         image.status = 'processed'
