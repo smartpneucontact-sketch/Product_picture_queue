@@ -8,6 +8,9 @@ from shopify_client import ShopifyClient
 import threading
 import numpy as np
 
+import logging
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 app.config.from_object(Config)
 
