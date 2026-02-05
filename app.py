@@ -347,6 +347,7 @@ def gauge_crop():
         
         # Update the existing image with the gauge closeup as processed version
         image.processed_url = closeup_url
+        image.image_type = 'gauge'  # Mark as gauge so it won't be reprocessed
         image.status = 'processed'
         image.processed_at = datetime.utcnow()
         db.session.commit()
@@ -463,9 +464,10 @@ def process_images(image_ids, app, upload_to_shopify=True):
         
         for image in images:
             try:
-                # Skip processing if already has a processed image (e.g., gauge closeup)
-                if image.processed_url:
-                    logger.info(f"Image {image.id} already processed, skipping")
+                # Skip processing only for gauge closeups (manually cropped)
+                # Front/side images should be reprocessed if requested
+                if image.processed_url and image.image_type == 'gauge':
+                    logger.info(f"Image {image.id} is gauge closeup, skipping reprocess")
                     processed_urls.append(image.processed_url)
                     if image.status != 'processed':
                         image.status = 'processed'
