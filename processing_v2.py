@@ -1224,12 +1224,11 @@ class ImageProcessorV2:
         """
         Adaptive enhancement of the dial gauge face region.
         
-        Addresses variable lighting by:
-        1. Normalizing dial face brightness to a consistent target
-        2. Applying CLAHE for local contrast (needle + tick marks pop)
-        3. Boosting color saturation in the dial for green/red zone visibility
-        
-        Blends enhanced dial region smoothly with the rest of the image.
+        Handles both dim AND overexposed dials:
+        - Dim: boost brightness to readable level
+        - Bright/glare: compress highlights to recover needle visibility
+        - Always: CLAHE for local contrast (needle + tick marks pop)
+        - Always: saturation boost for green/red zone visibility
         """
         h, w = img_array.shape[:2]
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
@@ -1247,7 +1246,6 @@ class ImageProcessorV2:
                                     param1=100, param2=30, minRadius=max(10, dial_radius - 20),
                                     maxRadius=dial_radius + 30)
         
-        # Find actual dial circle or fall back to estimated position
         found_cx, found_cy, found_r = dial_cx, dial_cy, dial_radius
         if circles is not None:
             roi_cx, roi_cy = dial_cx - sx1, dial_cy - sy1
@@ -1261,55 +1259,93 @@ class ImageProcessorV2:
                     found_cy = sy1 + dcy
                     found_r = dr
         
-        # Create soft circular mask for the dial face (feathered edges)
-        dial_mask = np.zeros((h, w), np.float32)
-        cv2.circle(dial_mask, (found_cx, found_cy), found_r, 1.0, -1)
-        dial_mask = cv2.GaussianBlur(dial_mask, (15, 15), 0)
-        
-        # === 1. Adaptive brightness normalization ===
-        # Measure current dial face brightness
+        # Create masks
         hard_mask = np.zeros((h, w), np.uint8)
         cv2.circle(hard_mask, (found_cx, found_cy), found_r, 255, -1)
+        soft_mask = np.zeros((h, w), np.float32)
+        cv2.circle(soft_mask, (found_cx, found_cy), found_r, 1.0, -1)
+        soft_mask = cv2.GaussianBlur(soft_mask, (15, 15), 0)
+        
+        # Measure dial face stats
         dial_pixels = gray[hard_mask > 0]
-        current_brightness = np.mean(dial_pixels)
+        mean_bright = np.mean(dial_pixels)
+        p95 = np.percentile(dial_pixels, 95)
+        p5 = np.percentile(dial_pixels, 5)
         
-        # Target: bright enough to read clearly but not blown out
-        target_brightness = 210.0
-        if current_brightness > 30:  # avoid divide by near-zero
-            brightness_factor = target_brightness / current_brightness
-            brightness_factor = np.clip(brightness_factor, 0.8, 1.8)  # don't over-correct
+        enhanced = img_array.copy()
+        
+        # === 1. Adaptive tone mapping ===
+        if mean_bright > 185:
+            # BRIGHT / GLARE: compress highlights to recover needle & markings
+            # Use a tone curve that pulls down bright areas while keeping darks
+            dial_region = enhanced.astype(np.float32)
+            # Gamma > 1 darkens bright areas, compresses highlight range
+            gamma = 1.0 + (mean_bright - 185) / 100.0  # 1.0-1.7 range
+            gamma = min(gamma, 1.6)
+            # Apply gamma only to dial region
+            normalized = dial_region / 255.0
+            corrected = np.power(normalized, gamma) * 255.0
+            mask_3ch = soft_mask[:, :, np.newaxis]
+            enhanced = (corrected * mask_3ch + dial_region * (1 - mask_3ch))
+            enhanced = np.clip(enhanced, 0, 255).astype(np.uint8)
+            logger.info(f"Dial tone: bright ({mean_bright:.0f}), gamma={gamma:.2f} to compress highlights")
+        elif mean_bright < 160:
+            # DIM: boost brightness
+            target = 185.0  # moderate target, not blown out
+            factor = np.clip(target / max(mean_bright, 30), 0.8, 1.8)
+            dial_region = enhanced.astype(np.float32)
+            brightened = np.clip(dial_region * factor, 0, 255)
+            mask_3ch = soft_mask[:, :, np.newaxis]
+            enhanced = (brightened * mask_3ch + dial_region * (1 - mask_3ch))
+            enhanced = np.clip(enhanced, 0, 255).astype(np.uint8)
+            logger.info(f"Dial tone: dim ({mean_bright:.0f}), boost x{factor:.2f}")
         else:
-            brightness_factor = 1.5
+            logger.info(f"Dial tone: good ({mean_bright:.0f}), no brightness change")
         
-        # Apply brightness adjustment to dial region
-        enhanced = img_array.astype(np.float32)
-        brightened = np.clip(enhanced * brightness_factor, 0, 255)
-        
-        # Blend: brightened dial face, original elsewhere
-        mask_3ch = dial_mask[:, :, np.newaxis]
-        enhanced = brightened * mask_3ch + enhanced * (1 - mask_3ch)
-        enhanced = np.clip(enhanced, 0, 255).astype(np.uint8)
-        
-        # === 2. CLAHE for local contrast (makes needle and markings pop) ===
+        # === 2. CLAHE for local contrast (needle and markings visibility) ===
         lab = cv2.cvtColor(enhanced, cv2.COLOR_RGB2LAB)
         l_channel = lab[:, :, 0]
         
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
+        # Stronger CLAHE when needle is hard to see (low contrast in dial)
+        dial_contrast = p95 - p5
+        clip_limit = 4.0 if dial_contrast < 120 else 3.0
+        
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(4, 4))
         l_enhanced = clahe.apply(l_channel)
         
-        # Blend CLAHE only into dial region
-        l_blended = (l_enhanced.astype(np.float32) * dial_mask + 
-                     l_channel.astype(np.float32) * (1 - dial_mask))
+        l_blended = (l_enhanced.astype(np.float32) * soft_mask + 
+                     l_channel.astype(np.float32) * (1 - soft_mask))
         lab[:, :, 0] = np.clip(l_blended, 0, 255).astype(np.uint8)
         enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
         
-        # === 3. Boost color saturation in dial for green/red zone visibility ===
+        # === 3. Sharpen dark features (needle, tick marks, numbers) ===
+        # Unsharp mask targeted at the dial to make thin dark lines pop
+        gray_enh = cv2.cvtColor(enhanced, cv2.COLOR_RGB2GRAY)
+        blurred_face = cv2.GaussianBlur(gray_enh, (0, 0), 2.0)
+        sharpened_gray = cv2.addWeighted(gray_enh, 1.8, blurred_face, -0.8, 0)
+        
+        # Apply sharpening only to dark features within dial (needle, numbers)
+        # Dark features: pixels significantly darker than the dial face mean
+        dark_threshold = np.mean(gray_enh[hard_mask > 0]) - 30
+        dark_feature_mask = ((gray_enh < dark_threshold) & (hard_mask > 0)).astype(np.float32)
+        dark_feature_mask = cv2.GaussianBlur(dark_feature_mask, (5, 5), 0)
+        
+        # Darken the dark features slightly more for contrast
+        for c in range(3):
+            channel = enhanced[:, :, c].astype(np.float32)
+            darkened = channel * 0.7  # make dark features 30% darker
+            enhanced[:, :, c] = np.clip(
+                channel * (1 - dark_feature_mask) + darkened * dark_feature_mask,
+                0, 255
+            ).astype(np.uint8)
+        
+        # === 4. Boost color saturation in dial for green/red zone visibility ===
         hsv = cv2.cvtColor(enhanced, cv2.COLOR_RGB2HSV).astype(np.float32)
         sat_boosted = np.clip(hsv[:, :, 1] * 1.4, 0, 255)
-        hsv[:, :, 1] = (sat_boosted * dial_mask + hsv[:, :, 1] * (1 - dial_mask))
+        hsv[:, :, 1] = (sat_boosted * soft_mask + hsv[:, :, 1] * (1 - soft_mask))
         enhanced = cv2.cvtColor(np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2RGB)
         
-        logger.info(f"Dial enhancement: brightness {current_brightness:.0f}→{target_brightness:.0f} (x{brightness_factor:.2f}), CLAHE clip=3.0, sat boost=1.4x")
+        logger.info(f"Dial enhancement: mean={mean_bright:.0f}, p5={p5:.0f}, p95={p95:.0f}, CLAHE clip={clip_limit}, dark feature boost applied")
         return enhanced
 
 
