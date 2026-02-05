@@ -1196,13 +1196,18 @@ class ImageProcessorV2:
                        whitened.astype(np.float32) * (1 - restore_3ch))
             whitened = np.clip(whitened, 0, 255).astype(np.uint8)
         
-        crop_img = Image.fromarray(whitened)
         logger.info(f"Backdrop whitening: {len(border_labels)} edge regions, {np.mean(bg_binary > 0)*100:.0f}% coverage")
         
-        # Step 3: Resize to output size
+        # Step 3: Dial-aware adaptive enhancement (before resize for best quality)
+        if gauge_type == 'dial':
+            whitened = self._enhance_dial_face(whitened, cx - x1, cy - y1, dial_radius)
+        
+        crop_img = Image.fromarray(whitened)
+        
+        # Step 4: Resize to output size
         crop_img = crop_img.resize((output_size, output_size), Image.Resampling.LANCZOS)
         
-        # Step 3: Enhance for readability
+        # Step 5: Global enhancement (gentle — heavy lifting done per-region above)
         crop_img = ImageEnhance.Sharpness(crop_img).enhance(1.3)
         crop_img = ImageEnhance.Contrast(crop_img).enhance(1.05)
         
@@ -1214,6 +1219,98 @@ class ImageProcessorV2:
         msg = f"Gauge closeup ({gauge_type}) from ({cx},{cy}), confidence={conf:.2f}"
         logger.info(msg)
         return output.getvalue(), msg
+    
+    def _enhance_dial_face(self, img_array, dial_cx, dial_cy, dial_radius):
+        """
+        Adaptive enhancement of the dial gauge face region.
+        
+        Addresses variable lighting by:
+        1. Normalizing dial face brightness to a consistent target
+        2. Applying CLAHE for local contrast (needle + tick marks pop)
+        3. Boosting color saturation in the dial for green/red zone visibility
+        
+        Blends enhanced dial region smoothly with the rest of the image.
+        """
+        h, w = img_array.shape[:2]
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        
+        # Re-detect the dial circle precisely in the current crop
+        search_r = int(dial_radius * 3)
+        sy1 = max(0, dial_cy - search_r)
+        sy2 = min(h, dial_cy + search_r)
+        sx1 = max(0, dial_cx - search_r)
+        sx2 = min(w, dial_cx + search_r)
+        roi_gray = gray[sy1:sy2, sx1:sx2]
+        
+        blurred = cv2.GaussianBlur(roi_gray, (9, 9), 2)
+        circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=30,
+                                    param1=100, param2=30, minRadius=max(10, dial_radius - 20),
+                                    maxRadius=dial_radius + 30)
+        
+        # Find actual dial circle or fall back to estimated position
+        found_cx, found_cy, found_r = dial_cx, dial_cy, dial_radius
+        if circles is not None:
+            roi_cx, roi_cy = dial_cx - sx1, dial_cy - sy1
+            best_dist = float('inf')
+            for c in circles[0]:
+                dcx, dcy, dr = int(c[0]), int(c[1]), int(c[2])
+                dist = ((dcx - roi_cx)**2 + (dcy - roi_cy)**2)**0.5
+                if dist < best_dist:
+                    best_dist = dist
+                    found_cx = sx1 + dcx
+                    found_cy = sy1 + dcy
+                    found_r = dr
+        
+        # Create soft circular mask for the dial face (feathered edges)
+        dial_mask = np.zeros((h, w), np.float32)
+        cv2.circle(dial_mask, (found_cx, found_cy), found_r, 1.0, -1)
+        dial_mask = cv2.GaussianBlur(dial_mask, (15, 15), 0)
+        
+        # === 1. Adaptive brightness normalization ===
+        # Measure current dial face brightness
+        hard_mask = np.zeros((h, w), np.uint8)
+        cv2.circle(hard_mask, (found_cx, found_cy), found_r, 255, -1)
+        dial_pixels = gray[hard_mask > 0]
+        current_brightness = np.mean(dial_pixels)
+        
+        # Target: bright enough to read clearly but not blown out
+        target_brightness = 210.0
+        if current_brightness > 30:  # avoid divide by near-zero
+            brightness_factor = target_brightness / current_brightness
+            brightness_factor = np.clip(brightness_factor, 0.8, 1.8)  # don't over-correct
+        else:
+            brightness_factor = 1.5
+        
+        # Apply brightness adjustment to dial region
+        enhanced = img_array.astype(np.float32)
+        brightened = np.clip(enhanced * brightness_factor, 0, 255)
+        
+        # Blend: brightened dial face, original elsewhere
+        mask_3ch = dial_mask[:, :, np.newaxis]
+        enhanced = brightened * mask_3ch + enhanced * (1 - mask_3ch)
+        enhanced = np.clip(enhanced, 0, 255).astype(np.uint8)
+        
+        # === 2. CLAHE for local contrast (makes needle and markings pop) ===
+        lab = cv2.cvtColor(enhanced, cv2.COLOR_RGB2LAB)
+        l_channel = lab[:, :, 0]
+        
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
+        l_enhanced = clahe.apply(l_channel)
+        
+        # Blend CLAHE only into dial region
+        l_blended = (l_enhanced.astype(np.float32) * dial_mask + 
+                     l_channel.astype(np.float32) * (1 - dial_mask))
+        lab[:, :, 0] = np.clip(l_blended, 0, 255).astype(np.uint8)
+        enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+        
+        # === 3. Boost color saturation in dial for green/red zone visibility ===
+        hsv = cv2.cvtColor(enhanced, cv2.COLOR_RGB2HSV).astype(np.float32)
+        sat_boosted = np.clip(hsv[:, :, 1] * 1.4, 0, 255)
+        hsv[:, :, 1] = (sat_boosted * dial_mask + hsv[:, :, 1] * (1 - dial_mask))
+        enhanced = cv2.cvtColor(np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2RGB)
+        
+        logger.info(f"Dial enhancement: brightness {current_brightness:.0f}→{target_brightness:.0f} (x{brightness_factor:.2f}), CLAHE clip=3.0, sat boost=1.4x")
+        return enhanced
 
 
 ImageProcessor = ImageProcessorV2
