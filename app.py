@@ -364,6 +364,59 @@ def gauge_crop():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/images/<int:image_id>/crop-region', methods=['POST'])
+def set_crop_region(image_id):
+    """
+    Set a crop region for an image (to exclude people/unwanted objects).
+    Expects: {'x': 0, 'y': 0, 'width': 100, 'height': 100} as percentages (0-100)
+    """
+    image = Image.query.get_or_404(image_id)
+    data = request.get_json()
+    
+    x = data.get('x', 0)
+    y = data.get('y', 0)
+    width = data.get('width', 100)
+    height = data.get('height', 100)
+    
+    # Store as JSON string in error_message field temporarily (or add new field)
+    # Format: "crop:x,y,w,h"
+    crop_data = f"crop:{x},{y},{width},{height}"
+    
+    # Clear any previous processed version so it gets reprocessed with crop
+    image.processed_url = None
+    image.status = 'pending'
+    
+    # Store crop region (using a simple format in the filename for now)
+    # In production, add a crop_region column to the model
+    if not image.original_filename.startswith('CROP_'):
+        image.original_filename = f"CROP_{x}_{y}_{width}_{height}_" + image.original_filename
+    else:
+        # Update existing crop
+        parts = image.original_filename.split('_', 5)
+        image.original_filename = f"CROP_{x}_{y}_{width}_{height}_" + parts[5]
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'crop': {'x': x, 'y': y, 'width': width, 'height': height}
+    })
+
+
+@app.route('/api/images/<int:image_id>/clear-crop', methods=['POST'])
+def clear_crop_region(image_id):
+    """Clear crop region from an image."""
+    image = Image.query.get_or_404(image_id)
+    
+    if image.original_filename.startswith('CROP_'):
+        parts = image.original_filename.split('_', 5)
+        if len(parts) >= 6:
+            image.original_filename = parts[5]
+        db.session.commit()
+    
+    return jsonify({'success': True})
+
+
 @app.route('/api/gauge-detect', methods=['POST'])
 def gauge_detect():
     """
@@ -465,8 +518,14 @@ def process_images(image_ids, app, upload_to_shopify=True):
         for image in images:
             try:
                 # Skip processing only for gauge closeups (manually cropped)
-                # Front/side images should be reprocessed if requested
-                if image.processed_url and image.image_type == 'gauge':
+                # Check both image_type and filename/URL (for older gauge images)
+                is_gauge = (image.image_type == 'gauge' or 
+                           (image.processed_url and 'gauge_' in image.processed_url) or
+                           (image.original_filename and image.original_filename.startswith('gauge_')))
+                
+                logger.info(f"Image {image.id}: type={image.image_type}, has_processed={bool(image.processed_url)}, is_gauge={is_gauge}")
+                
+                if image.processed_url and is_gauge:
                     logger.info(f"Image {image.id} is gauge closeup, skipping reprocess")
                     processed_urls.append(image.processed_url)
                     if image.status != 'processed':
@@ -485,6 +544,39 @@ def process_images(image_ids, app, upload_to_shopify=True):
                 if len(response.content) < 1000:
                     raise Exception(f"Downloaded data too small ({len(response.content)} bytes), likely an error page")
                 original_data = response.content
+                
+                # Apply crop region if set (filename starts with CROP_x_y_w_h_)
+                if image.original_filename.startswith('CROP_'):
+                    try:
+                        parts = image.original_filename.split('_')
+                        crop_x = float(parts[1])  # percentages
+                        crop_y = float(parts[2])
+                        crop_w = float(parts[3])
+                        crop_h = float(parts[4])
+                        
+                        from PIL import Image as PILImage
+                        from io import BytesIO
+                        
+                        pil_img = PILImage.open(BytesIO(original_data))
+                        img_w, img_h = pil_img.size
+                        
+                        # Convert percentages to pixels
+                        left = int(img_w * crop_x / 100)
+                        top = int(img_h * crop_y / 100)
+                        right = int(img_w * (crop_x + crop_w) / 100)
+                        bottom = int(img_h * (crop_y + crop_h) / 100)
+                        
+                        cropped = pil_img.crop((left, top, right, bottom))
+                        
+                        # Convert back to bytes
+                        buffer = BytesIO()
+                        cropped.save(buffer, format='JPEG', quality=98)
+                        buffer.seek(0)
+                        original_data = buffer.getvalue()
+                        
+                        logger.info(f"Applied crop region: {crop_x},{crop_y} {crop_w}x{crop_h}%")
+                    except Exception as crop_err:
+                        logger.warning(f"Failed to apply crop region: {crop_err}")
                 
                 # Process image (bg removal + crop)
                 # Side images skip label detection, front images find max 1 label

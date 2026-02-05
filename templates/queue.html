@@ -114,6 +114,8 @@
         .btn-secondary:hover { background: #555; }
         .btn-warning { background: #ff9800; color: white; }
         .btn-warning:hover { background: #f57c00; }
+        .btn-info { background: #2196F3; color: white; }
+        .btn-info:hover { background: #1976D2; }
         .btn-danger { background: #f44336; color: white; }
         .btn-danger:hover { background: #d32f2f; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -716,6 +718,7 @@
                         <div class="image-actions" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
                             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); startManualGaugeCrop(${img.id})" title="Click on gauge to crop">📏 Gauge</button>
                             <button class="btn btn-sm ${img.image_type === 'side' ? 'btn-warning' : 'btn-secondary'}" onclick="event.stopPropagation(); toggleSide(${img.id})" title="Mark as side picture (no label detection)">${img.image_type === 'side' ? '🔄 Side ✓' : '🔄 Side'}</button>
+                            <button class="btn btn-sm ${img.original_filename.startsWith('CROP_') ? 'btn-info' : 'btn-secondary'}" onclick="event.stopPropagation(); startCropRegion(${img.id}, '${img.original_url}')" title="Draw region to keep (exclude people/objects)">${img.original_filename.startsWith('CROP_') ? '✂️ Crop ✓' : '✂️ Crop'}</button>
                             ${img.status === 'failed' ? `
                                 <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); retryImage(${img.id})">Retry</button>
                             ` : ''}
@@ -1009,6 +1012,157 @@
             } catch (error) {
                 showToast('Toggle failed', 'error');
             }
+        }
+        
+        // Crop Region - allows drawing a box to keep only part of the image
+        let cropModal = null;
+        let cropCanvas = null;
+        let cropCtx = null;
+        let cropStartX, cropStartY, cropEndX, cropEndY;
+        let cropImageId = null;
+        let cropImg = null;
+        let isDrawing = false;
+        
+        function startCropRegion(id, imageUrl) {
+            cropImageId = id;
+            
+            // Create modal if not exists
+            if (!cropModal) {
+                cropModal = document.createElement('div');
+                cropModal.id = 'cropModal';
+                cropModal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+                cropModal.innerHTML = `
+                    <p style="color:white;margin-bottom:10px;">Draw a box around the area to KEEP (drag from corner to corner)</p>
+                    <canvas id="cropCanvas" style="max-width:90%;max-height:70vh;cursor:crosshair;"></canvas>
+                    <div style="margin-top:15px;display:flex;gap:10px;">
+                        <button id="cropConfirm" class="btn btn-primary">✓ Apply Crop</button>
+                        <button id="cropClear" class="btn btn-warning">↺ Clear</button>
+                        <button id="cropCancel" class="btn btn-secondary">✕ Cancel</button>
+                    </div>
+                `;
+                document.body.appendChild(cropModal);
+                
+                cropCanvas = document.getElementById('cropCanvas');
+                cropCtx = cropCanvas.getContext('2d');
+                
+                cropCanvas.addEventListener('mousedown', cropMouseDown);
+                cropCanvas.addEventListener('mousemove', cropMouseMove);
+                cropCanvas.addEventListener('mouseup', cropMouseUp);
+                
+                document.getElementById('cropConfirm').addEventListener('click', confirmCrop);
+                document.getElementById('cropClear').addEventListener('click', clearCropSelection);
+                document.getElementById('cropCancel').addEventListener('click', closeCropModal);
+            }
+            
+            cropModal.style.display = 'flex';
+            
+            // Load image
+            cropImg = new Image();
+            cropImg.crossOrigin = 'anonymous';
+            cropImg.onload = function() {
+                // Scale to fit screen
+                const maxW = window.innerWidth * 0.9;
+                const maxH = window.innerHeight * 0.7;
+                let scale = Math.min(maxW / cropImg.width, maxH / cropImg.height, 1);
+                
+                cropCanvas.width = cropImg.width * scale;
+                cropCanvas.height = cropImg.height * scale;
+                cropCanvas.dataset.scale = scale;
+                
+                cropCtx.drawImage(cropImg, 0, 0, cropCanvas.width, cropCanvas.height);
+            };
+            cropImg.src = imageUrl;
+            
+            cropStartX = cropStartY = cropEndX = cropEndY = 0;
+        }
+        
+        function cropMouseDown(e) {
+            const rect = cropCanvas.getBoundingClientRect();
+            cropStartX = e.clientX - rect.left;
+            cropStartY = e.clientY - rect.top;
+            isDrawing = true;
+        }
+        
+        function cropMouseMove(e) {
+            if (!isDrawing) return;
+            const rect = cropCanvas.getBoundingClientRect();
+            cropEndX = e.clientX - rect.left;
+            cropEndY = e.clientY - rect.top;
+            
+            // Redraw image and selection box
+            cropCtx.drawImage(cropImg, 0, 0, cropCanvas.width, cropCanvas.height);
+            
+            // Darken outside selection
+            cropCtx.fillStyle = 'rgba(0,0,0,0.5)';
+            cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+            
+            // Clear selection area (show original)
+            const x = Math.min(cropStartX, cropEndX);
+            const y = Math.min(cropStartY, cropEndY);
+            const w = Math.abs(cropEndX - cropStartX);
+            const h = Math.abs(cropEndY - cropStartY);
+            
+            cropCtx.clearRect(x, y, w, h);
+            cropCtx.drawImage(cropImg, 0, 0, cropCanvas.width, cropCanvas.height);
+            cropCtx.fillStyle = 'rgba(0,0,0,0.5)';
+            cropCtx.beginPath();
+            cropCtx.rect(0, 0, cropCanvas.width, cropCanvas.height);
+            cropCtx.rect(x, y, w, h);
+            cropCtx.fill('evenodd');
+            
+            // Draw border
+            cropCtx.strokeStyle = '#4CAF50';
+            cropCtx.lineWidth = 2;
+            cropCtx.strokeRect(x, y, w, h);
+        }
+        
+        function cropMouseUp(e) {
+            isDrawing = false;
+        }
+        
+        function clearCropSelection() {
+            cropCtx.drawImage(cropImg, 0, 0, cropCanvas.width, cropCanvas.height);
+            cropStartX = cropStartY = cropEndX = cropEndY = 0;
+        }
+        
+        async function confirmCrop() {
+            // Calculate percentages
+            const x = Math.min(cropStartX, cropEndX);
+            const y = Math.min(cropStartY, cropEndY);
+            const w = Math.abs(cropEndX - cropStartX);
+            const h = Math.abs(cropEndY - cropStartY);
+            
+            if (w < 10 || h < 10) {
+                showToast('Draw a larger selection', 'error');
+                return;
+            }
+            
+            const xPct = (x / cropCanvas.width) * 100;
+            const yPct = (y / cropCanvas.height) * 100;
+            const wPct = (w / cropCanvas.width) * 100;
+            const hPct = (h / cropCanvas.height) * 100;
+            
+            try {
+                const response = await fetch(`/api/images/${cropImageId}/crop-region`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x: xPct, y: yPct, width: wPct, height: hPct })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Crop region set - click Process to apply', 'success');
+                    closeCropModal();
+                    loadImages();
+                } else {
+                    showToast(result.error || 'Failed', 'error');
+                }
+            } catch (error) {
+                showToast('Failed to set crop', 'error');
+            }
+        }
+        
+        function closeCropModal() {
+            if (cropModal) cropModal.style.display = 'none';
         }
         
         async function gaugeCrop(id, btn) {
