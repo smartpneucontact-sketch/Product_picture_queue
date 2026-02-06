@@ -559,13 +559,14 @@
             </div>
             
             <!-- Filter Tabs -->
-            <div class="tabs">
+            <div class="tabs" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <button class="tab active" data-status="">All</button>
                 <button class="tab" data-status="pending">Pending</button>
                 <button class="tab" data-status="draft">Draft</button>
                 <button class="tab" data-status="processing">Processing</button>
                 <button class="tab" data-status="completed">Completed</button>
                 <button class="tab" data-status="failed">Failed</button>
+                <input type="text" id="skuSearch" placeholder="Search SKU..." style="padding: 8px 12px; border: 1px solid #444; border-radius: 4px; background: #222; color: white; width: 150px;">
             </div>
         </div>
         
@@ -597,6 +598,7 @@
         let selectedIds = new Set();
         let selectionOrder = []; // Track order of selection for upload numbering
         let currentFilter = '';
+        let skuSearchTerm = '';
         let openDays = new Set(); // Track which days are open
         
         // Load images
@@ -622,11 +624,24 @@
         }
         
         function filterImages() {
-            if (!currentFilter) return allImages;
-            if (currentFilter === 'processing') {
-                return allImages.filter(i => ['assigned', 'processing', 'processed'].includes(i.status));
+            let filtered = allImages;
+            
+            // Filter by status
+            if (currentFilter) {
+                if (currentFilter === 'processing') {
+                    filtered = filtered.filter(i => ['assigned', 'processing', 'processed'].includes(i.status));
+                } else {
+                    filtered = filtered.filter(i => i.status === currentFilter);
+                }
             }
-            return allImages.filter(i => i.status === currentFilter);
+            
+            // Filter by SKU search
+            if (skuSearchTerm) {
+                const term = skuSearchTerm.toLowerCase();
+                filtered = filtered.filter(i => i.sku && i.sku.toLowerCase().includes(term));
+            }
+            
+            return filtered;
         }
         
         function groupByDay(images) {
@@ -1273,6 +1288,12 @@
                 currentFilter = tab.dataset.status;
                 renderDays();
             });
+        });
+        
+        // SKU search
+        document.getElementById('skuSearch').addEventListener('input', (e) => {
+            skuSearchTerm = e.target.value;
+            renderDays();
         });
         
         // Lightbox
