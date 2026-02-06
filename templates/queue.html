@@ -722,6 +722,9 @@
                             ${img.status === 'failed' ? `
                                 <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); retryImage(${img.id})">Retry</button>
                             ` : ''}
+                            ${img.processed_url ? `
+                                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); reprocessImage(${img.id})" title="Clear and reprocess from original">🔁 Reprocess</button>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -995,6 +998,21 @@
                 }
             } catch (error) {
                 showToast('Retry failed', 'error');
+            }
+        }
+        
+        async function reprocessImage(id) {
+            try {
+                const response = await fetch(`/api/images/${id}/reprocess`, { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Reprocessing from original...', 'success');
+                    loadImages();
+                } else {
+                    showToast(result.error || 'Reprocess failed', 'error');
+                }
+            } catch (error) {
+                showToast('Reprocess failed', 'error');
             }
         }
         

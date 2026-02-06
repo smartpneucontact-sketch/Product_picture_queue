@@ -634,6 +634,24 @@ def retry_image(image_id):
     return jsonify({'success': True})
 
 
+@app.route('/api/images/<int:image_id>/reprocess', methods=['POST'])
+def reprocess_image(image_id):
+    """Clear processed version and reprocess from original."""
+    image = Image.query.get_or_404(image_id)
+    
+    # Clear processed version
+    image.processed_url = None
+    image.status = 'assigned'
+    image.error_message = None
+    db.session.commit()
+    
+    # Start processing
+    thread = threading.Thread(target=process_images, args=([image_id], app, False))
+    thread.start()
+    
+    return jsonify({'success': True})
+
+
 @app.route('/api/reset-stuck', methods=['POST'])
 def reset_stuck():
     """Reset stuck processing images to failed status."""
