@@ -635,7 +635,7 @@ def retry_image(image_id):
 
 
 @app.route('/api/images/<int:image_id>/reprocess', methods=['POST'])
-def reprocess_image(image_id):
+def reprocess_queue_image(image_id):
     """Clear processed version and reprocess from original."""
     image = Image.query.get_or_404(image_id)
     
