@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for
 from datetime import datetime
 from config import Config
 from models import db, Image
-from storage import CloudinaryStorage
+from storage import R2Storage
 from processing_v2 import ImageProcessor
 from shopify_client import ShopifyClient
 import threading
@@ -38,10 +38,12 @@ _shopify = None
 def get_storage():
     global _storage
     if _storage is None:
-        _storage = CloudinaryStorage(
-            Config.CLOUDINARY_CLOUD_NAME,
-            Config.CLOUDINARY_API_KEY,
-            Config.CLOUDINARY_API_SECRET
+        _storage = R2Storage(
+            Config.R2_ACCESS_KEY_ID,
+            Config.R2_SECRET_ACCESS_KEY,
+            Config.R2_BUCKET_NAME,
+            Config.R2_ACCOUNT_ID,
+            Config.R2_PUBLIC_URL
         )
     return _storage
 

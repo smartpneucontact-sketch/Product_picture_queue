@@ -12,10 +12,12 @@ class Config:
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    # Cloudinary
-    CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME')
-    CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY')
-    CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET')
+    # Cloudflare R2 Storage
+    R2_ACCESS_KEY_ID = os.environ.get('R2_ACCESS_KEY_ID')
+    R2_SECRET_ACCESS_KEY = os.environ.get('R2_SECRET_ACCESS_KEY')
+    R2_BUCKET_NAME = os.environ.get('R2_BUCKET_NAME', 'smartpneu-images')
+    R2_ACCOUNT_ID = os.environ.get('R2_ACCOUNT_ID', 'e276b85cfe3f10140f3eaa752e405d39')
+    R2_PUBLIC_URL = os.environ.get('R2_PUBLIC_URL', 'https://pub-7541f1c3a1ac4cd1a1af891329a72c80.r2.dev')
     
     # remove.bg API (legacy)
     REMOVEBG_API_KEY = os.environ.get('REMOVEBG_API_KEY')
