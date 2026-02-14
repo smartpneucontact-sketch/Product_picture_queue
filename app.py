@@ -654,10 +654,10 @@ def reprocess_queue_image(image_id):
     return jsonify({'success': True})
 
 
-@app.route('/api/reset-stuck', methods=['POST'])
+@app.route('/api/reset-stuck', methods=['GET', 'POST'])
 def reset_stuck():
-    """Reset stuck processing images to failed status."""
-    stuck = Image.query.filter_by(status='processing').all()
+    """Reset stuck processing/assigned images to failed status."""
+    stuck = Image.query.filter(Image.status.in_(['processing', 'assigned'])).all()
     count = 0
     for img in stuck:
         img.status = 'failed'
