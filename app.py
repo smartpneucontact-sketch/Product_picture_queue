@@ -6,6 +6,7 @@ from storage import R2Storage
 from processing_v2 import ImageProcessor
 from shopify_client import ShopifyClient
 import threading
+import requests
 import numpy as np
 import logging
 
@@ -666,6 +667,94 @@ def reset_stuck():
     db.session.commit()
     logger.info(f"Reset {count} stuck images")
     return jsonify({'reset': count})
+
+
+@app.route('/api/migrate-cloudinary-to-r2', methods=['GET'])
+def migrate_cloudinary_status():
+    """Check how many Cloudinary URLs need migration."""
+    images = Image.query.all()
+    
+    def is_cloudinary(url):
+        return url and 'cloudinary.com' in url
+    
+    cloudinary_original = sum(1 for img in images if is_cloudinary(img.original_url))
+    cloudinary_processed = sum(1 for img in images if is_cloudinary(img.processed_url))
+    
+    return jsonify({
+        'total_images': len(images),
+        'cloudinary_original': cloudinary_original,
+        'cloudinary_processed': cloudinary_processed,
+        'total_to_migrate': cloudinary_original + cloudinary_processed,
+        'message': 'POST to this endpoint to start migration'
+    })
+
+
+@app.route('/api/migrate-cloudinary-to-r2', methods=['POST'])
+def migrate_cloudinary_to_r2():
+    """Migrate all Cloudinary images to R2."""
+    import uuid
+    from urllib.parse import urlparse
+    
+    storage = get_storage()
+    
+    def is_cloudinary(url):
+        return url and 'cloudinary.com' in url
+    
+    def download_image(url):
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            return response.content
+        except Exception as e:
+            logger.error(f"Failed to download {url}: {e}")
+            return None
+    
+    def get_ext(url):
+        path = urlparse(url).path
+        if '.' in path:
+            return path.rsplit('.', 1)[-1].lower()
+        return 'jpg'
+    
+    images = Image.query.all()
+    migrated = {'original': 0, 'processed': 0, 'failed': 0}
+    
+    for img in images:
+        # Migrate original_url
+        if is_cloudinary(img.original_url):
+            data = download_image(img.original_url)
+            if data:
+                try:
+                    new_url = storage.upload_image(data, f"migrated.{get_ext(img.original_url)}", 'originals')
+                    img.original_url = new_url
+                    migrated['original'] += 1
+                except Exception as e:
+                    logger.error(f"R2 upload failed: {e}")
+                    migrated['failed'] += 1
+            else:
+                migrated['failed'] += 1
+        
+        # Migrate processed_url
+        if is_cloudinary(img.processed_url):
+            data = download_image(img.processed_url)
+            if data:
+                try:
+                    new_url = storage.upload_image(data, f"migrated.{get_ext(img.processed_url)}", 'processed')
+                    img.processed_url = new_url
+                    migrated['processed'] += 1
+                except Exception as e:
+                    logger.error(f"R2 upload failed: {e}")
+                    migrated['failed'] += 1
+            else:
+                migrated['failed'] += 1
+        
+        db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'migrated_original': migrated['original'],
+        'migrated_processed': migrated['processed'],
+        'failed': migrated['failed']
+    })
 
 
 @app.route('/api/images/<int:image_id>/mark-side', methods=['POST'])
