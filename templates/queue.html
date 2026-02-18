@@ -722,6 +722,7 @@
                     </div>
                     <div class="image-info">
                         <div class="filename" title="${img.original_filename}">${img.original_filename}</div>
+                        <div class="image-time" style="font-size:11px; color:#888;">🕐 ${formatTime(img.created_at)}</div>
                         ${img.sku ? `<div class="sku">SKU: ${img.sku}</div>` : ''}
                         <span class="status status-${img.status}" ${img.error_message ? `title="${img.error_message}"` : ''}>${img.status}</span>
                         ${img.status === 'failed' && img.error_message ? `<div class="error-msg" style="color:#f44336;font-size:11px;margin-top:4px;">${img.error_message}</div>` : ''}
@@ -825,6 +826,12 @@
             if (inputDate.getTime() === yesterday.getTime()) return '📅 Yesterday';
             
             return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        }
+        
+        function formatTime(isoString) {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         }
         
         // Upload
