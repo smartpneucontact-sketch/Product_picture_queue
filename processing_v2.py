@@ -1257,5 +1257,150 @@ class ImageProcessorV2:
         logger.info(msg)
         return output.getvalue(), msg
 
+    # ==================== ORANGE GAUGE AUTO-DETECTION ====================
+    
+    def detect_orange_gauge(self, img_array):
+        """
+        Detect orange gauge case in image using color detection.
+        
+        Returns:
+            (cx, cy, confidence) or None if not found
+        """
+        hsv = cv2.cvtColor(img_array, cv2.COLOR_RGB2HSV)
+        h, w = img_array.shape[:2]
+        
+        # Orange color range in HSV
+        # Orange is roughly hue 5-25, high saturation, medium-high value
+        lower_orange = np.array([5, 100, 100])
+        upper_orange = np.array([25, 255, 255])
+        
+        mask = cv2.inRange(hsv, lower_orange, upper_orange)
+        
+        # Clean up mask
+        kernel = np.ones((5, 5), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        
+        # Find contours
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if not contours:
+            logger.warning("No orange regions found")
+            return None
+        
+        # Find the largest orange region (should be the gauge case)
+        best_contour = None
+        best_area = 0
+        min_area = (min(w, h) * 0.02) ** 2  # At least 2% of image dimension
+        
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > best_area and area > min_area:
+                best_area = area
+                best_contour = contour
+        
+        if best_contour is None:
+            logger.warning("No significant orange regions found")
+            return None
+        
+        # Get center of orange region
+        M = cv2.moments(best_contour)
+        if M["m00"] == 0:
+            return None
+        
+        cx = int(M["m10"] / M["m00"])
+        cy = int(M["m01"] / M["m00"])
+        
+        # Confidence based on size and color purity
+        confidence = min(1.0, best_area / (w * h * 0.01))  # Normalize
+        
+        logger.info(f"Orange gauge detected at ({cx}, {cy}), area={best_area}, conf={confidence:.2f}")
+        return (cx, cy, confidence)
+    
+    def crop_gauge_auto(self, image_data, output_size=None):
+        """
+        Auto-detect orange gauge case and crop to a consistent square size.
+        The gauge will always appear at the same size in the output.
+        
+        Args:
+            image_data: Raw image bytes or PIL Image
+            output_size: Output image size (default: self.output_size)
+            
+        Returns:
+            (jpeg_bytes, message) or (None, error_message)
+        """
+        output_size = output_size or self.output_size
+        GAUGE_CROP_SIZE = 400  # Fixed crop size around gauge (in source pixels relative to gauge)
+        
+        if isinstance(image_data, bytes):
+            img = Image.open(BytesIO(image_data)).convert('RGB')
+        elif isinstance(image_data, Image.Image):
+            img = image_data if image_data.mode == 'RGB' else image_data.convert('RGB')
+        else:
+            img = image_data
+        
+        img_array = np.array(img)
+        h, w = img_array.shape[:2]
+        
+        # Detect orange gauge
+        result = self.detect_orange_gauge(img_array)
+        if result is None:
+            return None, "No orange gauge case detected"
+        
+        cx, cy, conf = result
+        
+        if conf < 0.3:
+            return None, f"Low confidence orange detection ({conf:.2f})"
+        
+        # Calculate crop region - fixed size relative to image
+        # We want consistent framing, so crop size is proportional to image
+        min_dim = min(w, h)
+        crop_radius = int(min_dim * 0.15)  # 15% of image on each side
+        
+        # Center crop on gauge, shift down slightly to include gauge body
+        cy_adjusted = cy + int(crop_radius * 0.3)  # Shift down to center dial, not orange top
+        
+        x1 = max(0, cx - crop_radius)
+        x2 = min(w, cx + crop_radius)
+        y1 = max(0, cy_adjusted - crop_radius)
+        y2 = min(h, cy_adjusted + crop_radius)
+        
+        # Ensure square crop
+        crop_w = x2 - x1
+        crop_h = y2 - y1
+        if crop_w != crop_h:
+            side = min(crop_w, crop_h)
+            x2 = x1 + side
+            y2 = y1 + side
+        
+        # Crop
+        cropped = img.crop((x1, y1, x2, y2))
+        
+        # Create output canvas (white background)
+        final = Image.new('RGB', (output_size, output_size), (255, 255, 255))
+        
+        # Resize cropped region to fill most of output
+        target_size = int(output_size * 0.9)  # 90% of output size
+        cropped_resized = cropped.resize((target_size, target_size), Image.LANCZOS)
+        
+        # Center on canvas
+        offset = (output_size - target_size) // 2
+        final.paste(cropped_resized, (offset, offset))
+        
+        # Light enhancement for readability
+        enhancer = ImageEnhance.Contrast(final)
+        final = enhancer.enhance(1.1)
+        enhancer = ImageEnhance.Sharpness(final)
+        final = enhancer.enhance(1.2)
+        
+        # Save to bytes
+        output = BytesIO()
+        final.save(output, format='JPEG', quality=95, subsampling=0)
+        output.seek(0)
+        
+        msg = f"Gauge auto-cropped from orange case at ({cx},{cy}), conf={conf:.2f}"
+        logger.info(msg)
+        return output.getvalue(), msg
+
 
 ImageProcessor = ImageProcessorV2

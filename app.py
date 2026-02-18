@@ -787,6 +787,83 @@ def mark_side(image_id):
     return jsonify({'success': True, 'image_type': image.image_type})
 
 
+@app.route('/api/images/<int:image_id>/process-front', methods=['POST'])
+def process_front(image_id):
+    """Process image as front tire (with label detection)."""
+    image = Image.query.get_or_404(image_id)
+    image.image_type = 'front'
+    image.status = 'assigned'
+    image.processed_url = None
+    image.error_message = None
+    db.session.commit()
+    
+    # Start processing
+    thread = threading.Thread(target=process_images, args=([image_id], app, False))
+    thread.start()
+    
+    return jsonify({'success': True, 'message': 'Processing as front tire'})
+
+
+@app.route('/api/images/<int:image_id>/process-side', methods=['POST'])
+def process_side(image_id):
+    """Process image as side tire (no label detection) - processes immediately."""
+    image = Image.query.get_or_404(image_id)
+    image.image_type = 'side'
+    image.status = 'assigned'
+    image.processed_url = None
+    image.error_message = None
+    db.session.commit()
+    
+    # Start processing
+    thread = threading.Thread(target=process_images, args=([image_id], app, False))
+    thread.start()
+    
+    return jsonify({'success': True, 'message': 'Processing as side tire'})
+
+
+@app.route('/api/images/<int:image_id>/process-gauge', methods=['POST'])
+def process_gauge_auto(image_id):
+    """Auto-detect orange gauge case and crop to consistent size."""
+    image = Image.query.get_or_404(image_id)
+    
+    try:
+        # Download original image
+        response = requests.get(image.original_url, timeout=30)
+        response.raise_for_status()
+        image_data = response.content
+        
+        # Process with auto gauge detection
+        processor = get_processor()
+        result, message = processor.crop_gauge_auto(image_data)
+        
+        if result is None:
+            return jsonify({'success': False, 'error': message}), 400
+        
+        # Upload processed image
+        storage = get_storage()
+        processed_url = storage.upload_processed_image(result, f"gauge_{image.original_filename}")
+        
+        # Update database
+        image.processed_url = processed_url
+        image.status = 'completed'
+        image.image_type = 'gauge'
+        image.error_message = None
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'message': message,
+            'processed_url': processed_url
+        })
+        
+    except Exception as e:
+        logger.error(f"Gauge processing failed for image {image_id}: {e}")
+        image.status = 'failed'
+        image.error_message = str(e)
+        db.session.commit()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # =============================================================================
 # Web UI
 # =============================================================================

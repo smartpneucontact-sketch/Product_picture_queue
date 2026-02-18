@@ -732,15 +732,17 @@
                                class="${img.processed_url ? '' : 'disabled'}">⬇ Processed</a>
                         </div>
                         <div class="image-actions" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); startManualGaugeCrop(${img.id})" title="Click on gauge to crop">📏 Gauge</button>
-                            <button class="btn btn-sm ${img.image_type === 'side' ? 'btn-warning' : 'btn-secondary'}" onclick="event.stopPropagation(); toggleSide(${img.id})" title="Mark as side picture (no label detection)">${img.image_type === 'side' ? '🔄 Side ✓' : '🔄 Side'}</button>
-                            <button class="btn btn-sm ${img.original_filename.startsWith('CROP_') ? 'btn-info' : 'btn-secondary'}" onclick="event.stopPropagation(); startCropRegion(${img.id}, '${img.original_url}')" title="Draw region to keep (exclude people/objects)">${img.original_filename.startsWith('CROP_') ? '✂️ Crop ✓' : '✂️ Crop'}</button>
+                            ${!img.processed_url ? `
+                                <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); processFront(${img.id})" title="Process as front tire (with label detection)">🔄 Process</button>
+                                <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); processSide(${img.id})" title="Process as side tire (no label detection)">📷 Side</button>
+                                <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); processGauge(${img.id})" title="Auto-detect orange gauge and crop">📏 Gauge</button>
+                            ` : `
+                                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); reprocessImage(${img.id})" title="Clear and reprocess">🔁 Reprocess</button>
+                            `}
                             ${img.status === 'failed' ? `
                                 <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); retryImage(${img.id})">Retry</button>
                             ` : ''}
-                            ${img.processed_url ? `
-                                <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); reprocessImage(${img.id})" title="Clear and reprocess from original">🔁 Reprocess</button>
-                            ` : ''}
+                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); startCropRegion(${img.id}, '${img.original_url}')" title="Draw region to keep (exclude people/objects)">✂️ Crop</button>
                         </div>
                     </div>
                 </div>
@@ -1051,6 +1053,54 @@
                 }
             } catch (error) {
                 showToast('Toggle failed', 'error');
+            }
+        }
+        
+        async function processFront(id) {
+            try {
+                showToast('Processing as front tire...', 'info');
+                const response = await fetch(`/api/images/${id}/process-front`, { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Processing started (front)', 'success');
+                    loadImages();
+                } else {
+                    showToast(result.error || 'Failed to start processing', 'error');
+                }
+            } catch (error) {
+                showToast('Processing failed', 'error');
+            }
+        }
+        
+        async function processSide(id) {
+            try {
+                showToast('Processing as side tire...', 'info');
+                const response = await fetch(`/api/images/${id}/process-side`, { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Processing started (side)', 'success');
+                    loadImages();
+                } else {
+                    showToast(result.error || 'Failed to start processing', 'error');
+                }
+            } catch (error) {
+                showToast('Processing failed', 'error');
+            }
+        }
+        
+        async function processGauge(id) {
+            try {
+                showToast('Detecting orange gauge...', 'info');
+                const response = await fetch(`/api/images/${id}/process-gauge`, { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Gauge processed!', 'success');
+                    loadImages();
+                } else {
+                    showToast(result.error || 'Gauge detection failed', 'error');
+                }
+            } catch (error) {
+                showToast('Gauge processing failed', 'error');
             }
         }
         
