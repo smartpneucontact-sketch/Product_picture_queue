@@ -685,17 +685,17 @@ def migrate_cloudinary_status():
         'cloudinary_original': cloudinary_original,
         'cloudinary_processed': cloudinary_processed,
         'total_to_migrate': cloudinary_original + cloudinary_processed,
-        'message': 'POST to this endpoint to start migration'
+        'message': 'POST to this endpoint to migrate a batch (10 images at a time)'
     })
 
 
 @app.route('/api/migrate-cloudinary-to-r2', methods=['POST'])
 def migrate_cloudinary_to_r2():
-    """Migrate all Cloudinary images to R2."""
-    import uuid
+    """Migrate a BATCH of Cloudinary images to R2 (10 at a time)."""
     from urllib.parse import urlparse
     
     storage = get_storage()
+    BATCH_SIZE = 10
     
     def is_cloudinary(url):
         return url and 'cloudinary.com' in url
@@ -715,10 +715,21 @@ def migrate_cloudinary_to_r2():
             return path.rsplit('.', 1)[-1].lower()
         return 'jpg'
     
+    # Find images with Cloudinary URLs (limit to batch size)
     images = Image.query.all()
+    to_migrate = [img for img in images if is_cloudinary(img.original_url) or is_cloudinary(img.processed_url)]
+    batch = to_migrate[:BATCH_SIZE]
+    
+    if not batch:
+        return jsonify({
+            'success': True,
+            'message': 'All done! No more Cloudinary images to migrate.',
+            'remaining': 0
+        })
+    
     migrated = {'original': 0, 'processed': 0, 'failed': 0}
     
-    for img in images:
+    for img in batch:
         # Migrate original_url
         if is_cloudinary(img.original_url):
             data = download_image(img.original_url)
@@ -749,11 +760,15 @@ def migrate_cloudinary_to_r2():
         
         db.session.commit()
     
+    remaining = len(to_migrate) - len(batch)
+    
     return jsonify({
         'success': True,
-        'migrated_original': migrated['original'],
-        'migrated_processed': migrated['processed'],
-        'failed': migrated['failed']
+        'batch_migrated_original': migrated['original'],
+        'batch_migrated_processed': migrated['processed'],
+        'batch_failed': migrated['failed'],
+        'remaining': remaining,
+        'message': f'{remaining} images still need migration. Run again!' if remaining > 0 else 'All done!'
     })
 
 
