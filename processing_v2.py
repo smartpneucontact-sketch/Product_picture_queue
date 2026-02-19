@@ -67,7 +67,7 @@ class ImageProcessorV2:
         self.side_shadow_lift = 22         # More shadow lifting for sides
         
         # Crop settings
-        self.margin_percent = 5
+        self.margin_percent = 7  # Increased for shadow room
         
         # Background removal
         self.bg_removal_method = 'poof' if self.poof_api_key else 'rembg'
@@ -760,21 +760,23 @@ class ImageProcessorV2:
                     center_x = (left_edge + right_edge) // 2
                     tire_width = right_edge - left_edge
                     
-                    # Create elliptical shadow - VERY SUBTLE
-                    shadow_height = int(height * 0.03)  # Shadow extends only 3% of image height
-                    shadow_width = int(tire_width * 0.8)
+                    # Create elliptical shadow
+                    shadow_height = int(height * 0.08)  # Shadow extends 8% of image height
+                    shadow_width = int(tire_width * 1.2)  # Wider than tire
                     
-                    for y in range(tire_bottom, min(height, tire_bottom + shadow_height)):
+                    logger.info(f"Drawing shadow: tire_bottom={tire_bottom}, shadow_height={shadow_height}, center_x={center_x}, shadow_width={shadow_width}")
+                    
+                    for y in range(tire_bottom + 1, min(height, tire_bottom + shadow_height)):
                         # Distance from tire bottom (0 at tire, 1 at shadow edge)
-                        y_dist = (y - tire_bottom) / shadow_height
-                        # Shadow fades out - VERY LIGHT
-                        shadow_strength = (1 - y_dist) ** 2 * 5  # Max 5 levels darker only
+                        y_dist = (y - tire_bottom) / shadow_height if shadow_height > 0 else 1
+                        # Shadow fades out - VISIBLE
+                        shadow_strength = (1 - y_dist) ** 1.2 * 35  # Max 35 levels darker
                         
                         # Horizontal falloff (elliptical)
                         for x in range(width):
                             x_dist = abs(x - center_x) / (shadow_width / 2) if shadow_width > 0 else 1
                             if x_dist < 1:
-                                x_fade = (1 - x_dist ** 2)  # Elliptical falloff
+                                x_fade = (1 - x_dist ** 2) ** 0.5  # Softer elliptical falloff
                                 darken = shadow_strength * x_fade
                                 bg_array[y, x, :] -= darken
         
