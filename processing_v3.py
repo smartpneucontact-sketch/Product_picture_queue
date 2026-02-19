@@ -368,9 +368,121 @@ class ImageProcessorV3:
             bg = Image.new('RGB', final.size, (255, 255, 255))
             alpha_img = Image.fromarray(alpha_array)
             result = Image.composite(final, bg, alpha_img)
-            return result
+        else:
+            result = final
         
-        return final
+        # Post-compositing cleanup: remove gray fringe + add contact shadow
+        result = self.cleanup_fringe(result)
+        result = self.add_contact_shadow(result)
+        
+        return result
+    
+    def cleanup_fringe(self, img):
+        """
+        Remove the gray halo/fringe left by background removal.
+        
+        After bg removal composites on white, the edge pixels are a gradient
+        from white to tire color (10+ pixels of gray). This pushes those
+        fringe pixels cleanly to white or tire, giving sharp edges.
+        """
+        arr = np.array(img)
+        h, w = arr.shape[:2]
+        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY).astype(np.float32)
+        
+        # Classify pixels
+        is_bg = gray > 248          # Pure white background
+        is_subject = gray < 120     # Definite tire rubber
+        is_fringe = (~is_bg) & (~is_subject)  # Gray in-between zone
+        
+        if not np.any(is_fringe):
+            return img
+        
+        # Distance from each pixel to nearest bg / nearest subject
+        bg_dist = cv2.distanceTransform((~is_bg).astype(np.uint8), cv2.DIST_L2, 5)
+        subject_dist = cv2.distanceTransform((~is_subject).astype(np.uint8), cv2.DIST_L2, 5)
+        
+        # Ratio: 0 = touching subject, 1 = touching background
+        total_dist = bg_dist + subject_dist + 0.001
+        bg_ratio = bg_dist / total_dist
+        
+        # Fringe pixels closer to background get pushed to white
+        # Threshold at 0.45 (slightly favors keeping tire detail)
+        keep_mask = np.ones((h, w), dtype=np.float32)
+        push_to_white = (bg_ratio < 0.55) & is_fringe
+        keep_mask[push_to_white] = 0.0
+        
+        # Smooth transition (2-3px anti-aliasing)
+        keep_mask = cv2.GaussianBlur(keep_mask, (3, 3), 0.8)
+        
+        # Apply
+        white = np.full_like(arr, 255, dtype=np.float32)
+        cleaned = arr.astype(np.float32) * keep_mask[:,:,np.newaxis] + white * (1 - keep_mask[:,:,np.newaxis])
+        cleaned = np.clip(cleaned, 0, 255).astype(np.uint8)
+        
+        fringe_cleaned = np.sum(push_to_white)
+        logger.info(f"Fringe cleanup: {fringe_cleaned} pixels cleaned")
+        
+        return Image.fromarray(cleaned)
+    
+    def add_contact_shadow(self, img):
+        """
+        Add a subtle contact shadow below the tire to ground it.
+        
+        Creates a soft elliptical shadow directly below the tire's bottom edge,
+        giving the appearance of the tire sitting on a surface.
+        """
+        arr = np.array(img)
+        h, w = arr.shape[:2]
+        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+        
+        # Find bottom of tire
+        content_mask = gray < 200
+        rows_with_content = np.any(content_mask, axis=1)
+        if not np.any(rows_with_content):
+            return img
+        
+        tire_bottom = np.max(np.where(rows_with_content)[0])
+        
+        # No room for shadow if tire is at very bottom
+        if tire_bottom > h * 0.98:
+            return img
+        
+        # Find horizontal extent at bottom
+        bottom_strip = content_mask[max(0, tire_bottom - 20):tire_bottom + 1, :]
+        cols_with_content = np.any(bottom_strip, axis=0)
+        if not np.any(cols_with_content):
+            return img
+        
+        left = np.min(np.where(cols_with_content)[0])
+        right = np.max(np.where(cols_with_content)[0])
+        center_x = (left + right) // 2
+        contact_width = right - left
+        
+        # Shadow parameters
+        shadow_h = int(h * 0.03)        # 3% of image height
+        shadow_w = int(contact_width * 0.85)  # 85% of tire width
+        max_darkness = 0.22              # 22% max opacity
+        
+        # Vectorized shadow creation
+        yy, xx = np.mgrid[0:h, 0:w]
+        y_progress = np.clip((yy - tire_bottom) / max(shadow_h, 1), 0, 1)
+        x_from_center = np.abs(xx - center_x) / max(shadow_w / 2, 1)
+        
+        # Elliptical shadow that fades downward
+        shadow_y = np.where(yy > tire_bottom, (1 - y_progress) ** 1.2, 0.0)
+        shadow_x = np.where(x_from_center < 1, np.sqrt(np.clip(1 - x_from_center ** 2, 0, 1)), 0.0)
+        shadow = (shadow_y * shadow_x * max_darkness).astype(np.float32)
+        
+        # Blur for softness
+        shadow = cv2.GaussianBlur(shadow, (31, 31), 10)
+        
+        # Apply shadow (darken background)
+        result = arr.astype(np.float32) * (1 - shadow[:,:,np.newaxis])
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        
+        logger.info(f"Contact shadow: bottom={tire_bottom}, width={contact_width}, center={center_x}")
+        
+        return Image.fromarray(result)
     
     # ==================== CROPPING ====================
     
