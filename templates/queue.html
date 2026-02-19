@@ -735,7 +735,7 @@
                             ${!img.processed_url ? `
                                 <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); processFront(${img.id})" title="Process as front tire (with label detection)">🔄 Process</button>
                                 <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); processSide(${img.id})" title="Process as side tire (no label detection)">📷 Side</button>
-                                <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); processGauge(${img.id})" title="Auto-detect orange gauge and crop">📏 Gauge</button>
+                                <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); startManualGaugeCrop(${img.id})" title="Click on gauge to crop">📏 Gauge</button>
                             ` : `
                                 <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); reprocessImage(${img.id})" title="Clear and reprocess">🔁 Reprocess</button>
                             `}
