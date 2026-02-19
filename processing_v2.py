@@ -67,7 +67,7 @@ class ImageProcessorV2:
         self.side_shadow_lift = 22         # More shadow lifting for sides
         
         # Crop settings
-        self.margin_percent = 7  # Increased for shadow room
+        self.margin_percent = 5
         
         # Background removal
         self.bg_removal_method = 'poof' if self.poof_api_key else 'rembg'
@@ -715,44 +715,23 @@ class ImageProcessorV2:
     
     def create_studio_background(self, size, alpha_array=None):
         """
-        Create a professional studio-style background.
-        
-        Features:
-        - Off-white color (not pure white)
-        - Subtle vertical gradient (slightly darker at top/bottom)
-        - Optional ground shadow based on tire position
+        Create a clean white background with subtle drop shadow.
+        Simulates overhead lighting casting shadow below the tire.
         """
         width, height = size
         
-        # Base color: nearly white (subtle off-white)
-        base_color = 250  # Almost white
+        # Pure white background
+        bg_array = np.ones((height, width, 3), dtype=np.float32) * 255
         
-        # Create gradient array
-        bg_array = np.ones((height, width, 3), dtype=np.float32) * base_color
-        
-        # Add subtle vertical gradient (darker at top and bottom edges)
-        # Top gradient (darken top 15%)
-        top_zone = int(height * 0.15)
-        for y in range(top_zone):
-            darken = (1 - y / top_zone) * 8  # Up to 8 levels darker at very top (was 15)
-            bg_array[y, :, :] -= darken
-        
-        # Bottom gradient (very subtle floor effect)
-        bottom_start = int(height * 0.80)
-        for y in range(bottom_start, height):
-            progress = (y - bottom_start) / (height - bottom_start)
-            darken = progress * 6  # Up to 6 levels darker at very bottom (was 10)
-            bg_array[y, :, :] -= darken
-        
-        # If we have alpha, add a subtle ground shadow under the tire
+        # Add drop shadow if we have alpha
         if alpha_array is not None:
-            # Find bottom of tire (lowest row with content)
+            # Find bottom of tire
             content_rows = np.any(alpha_array > 128, axis=1)
             if np.any(content_rows):
                 tire_bottom = np.max(np.where(content_rows)[0])
                 
                 # Find horizontal extent of tire at bottom
-                bottom_slice = alpha_array[max(0, tire_bottom-20):tire_bottom+1, :]
+                bottom_slice = alpha_array[max(0, tire_bottom-30):tire_bottom+1, :]
                 content_cols = np.any(bottom_slice > 128, axis=0)
                 if np.any(content_cols):
                     left_edge = np.min(np.where(content_cols)[0])
@@ -760,29 +739,25 @@ class ImageProcessorV2:
                     center_x = (left_edge + right_edge) // 2
                     tire_width = right_edge - left_edge
                     
-                    # Create elliptical shadow
-                    shadow_height = int(height * 0.08)  # Shadow extends 8% of image height
-                    shadow_width = int(tire_width * 1.2)  # Wider than tire
-                    
-                    logger.info(f"Drawing shadow: tire_bottom={tire_bottom}, shadow_height={shadow_height}, center_x={center_x}, shadow_width={shadow_width}")
+                    # Simple drop shadow - directly below tire
+                    shadow_height = int(height * 0.04)  # 4% of image
+                    shadow_width = int(tire_width * 0.95)
+                    max_darkness = 30  # How dark the shadow gets (0-255)
                     
                     for y in range(tire_bottom + 1, min(height, tire_bottom + shadow_height)):
-                        # Distance from tire bottom (0 at tire, 1 at shadow edge)
-                        y_dist = (y - tire_bottom) / shadow_height if shadow_height > 0 else 1
-                        # Shadow fades out - VISIBLE
-                        shadow_strength = (1 - y_dist) ** 1.2 * 35  # Max 35 levels darker
+                        y_progress = (y - tire_bottom) / shadow_height
+                        # Shadow fades out as it goes down
+                        row_darkness = max_darkness * (1 - y_progress) ** 0.8
                         
-                        # Horizontal falloff (elliptical)
-                        for x in range(width):
-                            x_dist = abs(x - center_x) / (shadow_width / 2) if shadow_width > 0 else 1
-                            if x_dist < 1:
-                                x_fade = (1 - x_dist ** 2) ** 0.5  # Softer elliptical falloff
-                                darken = shadow_strength * x_fade
-                                bg_array[y, x, :] -= darken
+                        for x in range(max(0, center_x - shadow_width//2), min(width, center_x + shadow_width//2)):
+                            # Horizontal fade - darker in center
+                            x_from_center = abs(x - center_x)
+                            x_progress = x_from_center / (shadow_width / 2) if shadow_width > 0 else 1
+                            if x_progress < 1:
+                                pixel_darkness = row_darkness * (1 - x_progress ** 2)
+                                bg_array[y, x, :] -= pixel_darkness
         
-        # Ensure valid range
         bg_array = np.clip(bg_array, 0, 255).astype(np.uint8)
-        
         return Image.fromarray(bg_array)
     
     # ==================== CROPPING ====================
