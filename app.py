@@ -3,7 +3,7 @@ from datetime import datetime
 from config import Config
 from models import db, Image
 from storage import R2Storage
-from processing_v2 import ImageProcessor
+from processing_v3 import ImageProcessor
 from shopify_client import ShopifyClient
 import threading
 import requests
