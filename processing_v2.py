@@ -46,6 +46,11 @@ class ImageProcessorV2:
         self.tire_contrast = 1.10        # Local contrast boost
         self.shadow_lift = 15            # Lift deep shadows (0-50)
         
+        # NEW: Brightness normalization
+        self.normalize_brightness = True  # Enable brightness normalization
+        self.target_brightness = 0.42     # Target average brightness (0-1), 0.42 = nice gray
+        self.brightness_tolerance = 0.05  # Don't adjust if within this range
+        
         # Label protection (bright text areas)
         self.label_threshold = 200       # Brightness threshold for label detection
         self.label_edge_threshold = 50   # Edge density threshold for text areas
@@ -55,6 +60,11 @@ class ImageProcessorV2:
         self.sharpness_factor = 1.15     # Overall sharpening
         self.color_correction = True     # Auto white balance
         self.denoise_strength = 3        # Noise reduction (0 = off)
+        
+        # Side image specific (more aggressive enhancement)
+        self.side_brightness_boost = 1.15  # Extra brightness for side images
+        self.side_contrast_boost = 1.15    # Extra contrast for side images
+        self.side_shadow_lift = 25         # More shadow lifting for sides
         
         # Crop settings
         self.margin_percent = 5
@@ -507,6 +517,57 @@ class ImageProcessorV2:
             return img_array
         return cv2.fastNlMeansDenoisingColored(img_array, None, strength, strength, 7, 21)
     
+    def normalize_brightness_to_target(self, img_array, target=0.42, tolerance=0.05, mask=None):
+        """
+        Normalize image brightness to a target level for consistency.
+        
+        Args:
+            img_array: RGB numpy array
+            target: Target average brightness (0-1), default 0.42 is good for tire rubber
+            tolerance: Don't adjust if within this range of target
+            mask: Optional alpha mask to only consider tire pixels (not background)
+            
+        Returns:
+            Brightness-normalized image
+        """
+        # Convert to float
+        img_float = img_array.astype(np.float32) / 255.0
+        
+        # Calculate current brightness (luminance)
+        luminance = 0.299 * img_float[:,:,0] + 0.587 * img_float[:,:,1] + 0.114 * img_float[:,:,2]
+        
+        # If mask provided, only consider non-transparent pixels
+        if mask is not None:
+            mask_bool = mask > 128
+            if np.sum(mask_bool) > 0:
+                current_brightness = np.mean(luminance[mask_bool])
+            else:
+                current_brightness = np.mean(luminance)
+        else:
+            current_brightness = np.mean(luminance)
+        
+        # Check if adjustment needed
+        if abs(current_brightness - target) < tolerance:
+            logger.info(f"Brightness {current_brightness:.3f} within tolerance of target {target}")
+            return img_array
+        
+        # Calculate adjustment factor
+        if current_brightness > 0.01:  # Avoid division by zero
+            adjustment = target / current_brightness
+        else:
+            adjustment = 1.0
+        
+        # Limit adjustment to reasonable range (0.7 to 1.6)
+        adjustment = np.clip(adjustment, 0.7, 1.6)
+        
+        logger.info(f"Normalizing brightness: {current_brightness:.3f} -> {target:.3f} (factor: {adjustment:.2f})")
+        
+        # Apply adjustment
+        result = img_float * adjustment
+        result = np.clip(result, 0, 1)
+        
+        return (result * 255).astype(np.uint8)
+    
     def enhance_image(self, img, skip_label=False):
         """
         Advanced tire image enhancement with intelligent label protection.
@@ -514,17 +575,20 @@ class ImageProcessorV2:
         Pipeline:
         1. Detect label regions (skipped for side images)
         2. Apply CLAHE for local contrast (tread detail)
-        3. Lift shadows
+        3. Lift shadows (more for side images)
         4. Color correction
         5. Denoise
-        6. Sharpen (only tire, not label)
-        7. Blend: enhanced tire + fully protected labels
+        6. Brightness normalization (consistent lighting)
+        7. Brightness/contrast boost (extra for side images)
+        8. Sharpen (only tire, not label)
+        9. Blend: enhanced tire + fully protected labels
         
         Args:
             img: PIL Image
             skip_label: If True, skip label detection (for side images)
         """
         has_alpha = img.mode == 'RGBA'
+        is_side_image = skip_label
         
         # Separate alpha channel
         if has_alpha:
@@ -539,7 +603,7 @@ class ImageProcessorV2:
         
         # Step 1: Detect label regions (pass alpha for better detection)
         if skip_label:
-            logger.info("Skipping label detection (side image)")
+            logger.info("Skipping label detection (side image) - applying stronger enhancement")
             label_mask = np.zeros((original_array.shape[0], original_array.shape[1]), dtype=np.float32)
         else:
             label_mask = self.detect_label_regions(original_array, alpha_array)
@@ -547,6 +611,17 @@ class ImageProcessorV2:
         
         # Step 2: Create enhanced version for tire areas
         enhanced = original_array.copy()
+        
+        # Determine enhancement parameters (stronger for side images)
+        if is_side_image:
+            shadow_lift_amount = self.side_shadow_lift
+            brightness_factor = self.tire_brightness * self.side_brightness_boost
+            contrast_factor = self.tire_contrast * self.side_contrast_boost
+            logger.info(f"Side image: shadow_lift={shadow_lift_amount}, brightness={brightness_factor:.2f}, contrast={contrast_factor:.2f}")
+        else:
+            shadow_lift_amount = self.shadow_lift
+            brightness_factor = self.tire_brightness
+            contrast_factor = self.tire_contrast
         
         # 2a. CLAHE for local contrast (only on tire)
         if self.tire_clahe_clip > 0:
@@ -558,8 +633,8 @@ class ImageProcessorV2:
             enhanced = enhanced.astype(np.uint8)
         
         # 2b. Shadow lifting (only on tire - dark areas)
-        if self.shadow_lift > 0:
-            shadow_result = self.lift_shadows(enhanced, self.shadow_lift)
+        if shadow_lift_amount > 0:
+            shadow_result = self.lift_shadows(enhanced, shadow_lift_amount)
             tire_mask_3ch = np.dstack([tire_mask, tire_mask, tire_mask])
             enhanced = (shadow_result.astype(np.float32) * tire_mask_3ch + 
                        enhanced.astype(np.float32) * (1 - tire_mask_3ch))
@@ -573,14 +648,23 @@ class ImageProcessorV2:
         if self.denoise_strength > 0:
             enhanced = self.denoise(enhanced, self.denoise_strength)
         
-        # 2e. Brightness/contrast adjustment (only on tire)
-        if self.tire_brightness != 1.0 or self.tire_contrast != 1.0:
+        # 2e. Brightness normalization (NEW - for consistent lighting)
+        if self.normalize_brightness:
+            enhanced = self.normalize_brightness_to_target(
+                enhanced, 
+                target=self.target_brightness,
+                tolerance=self.brightness_tolerance,
+                mask=alpha_array
+            )
+        
+        # 2f. Brightness/contrast adjustment (only on tire)
+        if brightness_factor != 1.0 or contrast_factor != 1.0:
             enhanced_pil = Image.fromarray(enhanced)
             adjusted = enhanced_pil.copy()
-            if self.tire_brightness != 1.0:
-                adjusted = ImageEnhance.Brightness(adjusted).enhance(self.tire_brightness)
-            if self.tire_contrast != 1.0:
-                adjusted = ImageEnhance.Contrast(adjusted).enhance(self.tire_contrast)
+            if brightness_factor != 1.0:
+                adjusted = ImageEnhance.Brightness(adjusted).enhance(brightness_factor)
+            if contrast_factor != 1.0:
+                adjusted = ImageEnhance.Contrast(adjusted).enhance(contrast_factor)
             adjusted_array = np.array(adjusted)
             
             # Blend - only apply adjustments to tire
