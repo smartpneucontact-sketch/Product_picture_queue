@@ -731,21 +731,18 @@ class ImageProcessorV2:
         bg_array = np.ones((height, width, 3), dtype=np.float32) * base_color
         
         # Add subtle vertical gradient (darker at top and bottom edges)
-        # This mimics natural lighting falloff on a studio backdrop
-        y_coords = np.arange(height).reshape(-1, 1)
-        
         # Top gradient (darken top 15%)
         top_zone = int(height * 0.15)
-        top_gradient = np.clip(y_coords[:top_zone] / top_zone, 0, 1)
-        top_darken = (1 - top_gradient) * 15  # Up to 15 levels darker at very top
-        bg_array[:top_zone, :, :] -= top_darken
+        for y in range(top_zone):
+            darken = (1 - y / top_zone) * 15  # Up to 15 levels darker at very top
+            bg_array[y, :, :] -= darken
         
         # Bottom gradient (darken bottom 25% - like floor shadow)
         bottom_start = int(height * 0.75)
-        bottom_zone = height - bottom_start
-        bottom_gradient = np.clip((y_coords[bottom_start:] - bottom_start) / bottom_zone, 0, 1)
-        bottom_darken = bottom_gradient * 20  # Up to 20 levels darker at very bottom
-        bg_array[bottom_start:, :, :] -= bottom_darken
+        for y in range(bottom_start, height):
+            progress = (y - bottom_start) / (height - bottom_start)
+            darken = progress * 20  # Up to 20 levels darker at very bottom
+            bg_array[y, :, :] -= darken
         
         # If we have alpha, add a subtle ground shadow under the tire
         if alpha_array is not None:
