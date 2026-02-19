@@ -704,14 +704,87 @@ class ImageProcessorV2:
         
         final = Image.fromarray(blended)
         
-        # Composite onto white background
+        # Composite onto studio background (off-white with subtle gradient)
         if has_alpha and alpha_array is not None:
-            white_bg = Image.new('RGB', final.size, (255, 255, 255))
+            studio_bg = self.create_studio_background(final.size, alpha_array)
             alpha_mask = Image.fromarray(alpha_array)
-            result = Image.composite(final, white_bg, alpha_mask)
+            result = Image.composite(final, studio_bg, alpha_mask)
             return result
         
         return final
+    
+    def create_studio_background(self, size, alpha_array=None):
+        """
+        Create a professional studio-style background.
+        
+        Features:
+        - Off-white color (not pure white)
+        - Subtle vertical gradient (slightly darker at top/bottom)
+        - Optional ground shadow based on tire position
+        """
+        width, height = size
+        
+        # Base color: off-white (like a real studio backdrop)
+        base_color = 245  # Slightly off-white
+        
+        # Create gradient array
+        bg_array = np.ones((height, width, 3), dtype=np.float32) * base_color
+        
+        # Add subtle vertical gradient (darker at top and bottom edges)
+        # This mimics natural lighting falloff on a studio backdrop
+        y_coords = np.arange(height).reshape(-1, 1)
+        
+        # Top gradient (darken top 15%)
+        top_zone = int(height * 0.15)
+        top_gradient = np.clip(y_coords[:top_zone] / top_zone, 0, 1)
+        top_darken = (1 - top_gradient) * 15  # Up to 15 levels darker at very top
+        bg_array[:top_zone, :, :] -= top_darken
+        
+        # Bottom gradient (darken bottom 25% - like floor shadow)
+        bottom_start = int(height * 0.75)
+        bottom_zone = height - bottom_start
+        bottom_gradient = np.clip((y_coords[bottom_start:] - bottom_start) / bottom_zone, 0, 1)
+        bottom_darken = bottom_gradient * 20  # Up to 20 levels darker at very bottom
+        bg_array[bottom_start:, :, :] -= bottom_darken
+        
+        # If we have alpha, add a subtle ground shadow under the tire
+        if alpha_array is not None:
+            # Find bottom of tire (lowest row with content)
+            content_rows = np.any(alpha_array > 128, axis=1)
+            if np.any(content_rows):
+                tire_bottom = np.max(np.where(content_rows)[0])
+                
+                # Find horizontal extent of tire at bottom
+                bottom_slice = alpha_array[max(0, tire_bottom-20):tire_bottom+1, :]
+                content_cols = np.any(bottom_slice > 128, axis=0)
+                if np.any(content_cols):
+                    left_edge = np.min(np.where(content_cols)[0])
+                    right_edge = np.max(np.where(content_cols)[0])
+                    center_x = (left_edge + right_edge) // 2
+                    tire_width = right_edge - left_edge
+                    
+                    # Create elliptical shadow
+                    shadow_height = int(height * 0.08)  # Shadow extends 8% of image height
+                    shadow_width = int(tire_width * 0.9)
+                    
+                    for y in range(tire_bottom, min(height, tire_bottom + shadow_height)):
+                        # Distance from tire bottom (0 at tire, 1 at shadow edge)
+                        y_dist = (y - tire_bottom) / shadow_height
+                        # Shadow fades out
+                        shadow_strength = (1 - y_dist) ** 2 * 25  # Max 25 levels darker
+                        
+                        # Horizontal falloff (elliptical)
+                        for x in range(width):
+                            x_dist = abs(x - center_x) / (shadow_width / 2) if shadow_width > 0 else 1
+                            if x_dist < 1:
+                                x_fade = (1 - x_dist ** 2)  # Elliptical falloff
+                                darken = shadow_strength * x_fade
+                                bg_array[y, x, :] -= darken
+        
+        # Ensure valid range
+        bg_array = np.clip(bg_array, 0, 255).astype(np.uint8)
+        
+        return Image.fromarray(bg_array)
     
     # ==================== CROPPING ====================
     
