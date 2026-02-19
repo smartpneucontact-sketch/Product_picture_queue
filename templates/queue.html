@@ -555,6 +555,7 @@
                 <button class="btn btn-secondary" id="processOnlyBtn" disabled>Process Only</button>
                 <button class="btn btn-secondary" id="processDraftsBtn" disabled>Process Drafts</button>
                 <button class="btn btn-danger" id="deleteBtn" disabled>Delete Selected</button>
+                <button class="btn btn-warning" id="resetStuckBtn" onclick="resetStuck()">Reset Stuck</button>
                 <span class="selection-info" id="selectionInfo">0 selected</span>
             </div>
             
@@ -1101,6 +1102,21 @@
                 }
             } catch (error) {
                 showToast('Gauge processing failed', 'error');
+            }
+        }
+        
+        async function resetStuck() {
+            try {
+                const response = await fetch('/api/reset-stuck', { method: 'POST' });
+                const result = await response.json();
+                if (result.reset > 0) {
+                    showToast(`Reset ${result.reset} stuck images`, 'success');
+                    loadImages();
+                } else {
+                    showToast('No stuck images found', 'info');
+                }
+            } catch (error) {
+                showToast('Reset failed', 'error');
             }
         }
         
