@@ -46,16 +46,12 @@ class ImageProcessorV3:
         self.output_size = output_size
         self.poof_api_key = poof_api_key or os.environ.get('POOF_API_KEY')
         
-        # ===== ENHANCEMENT (kept minimal) =====
-        # Front images (with label)
-        self.front_contrast = 1.08        # Slight contrast boost
-        self.front_sharpness = 1.10       # Slight sharpening
-        self.front_brightness = 1.0       # No brightness change
-        
-        # Side images (no label, show tread/sidewall detail)
-        self.side_contrast = 1.12         # Slightly more contrast
-        self.side_sharpness = 1.15        # Slightly more sharpening  
-        self.side_brightness = 1.03       # Very subtle brightening
+        # ===== ENHANCEMENT (e-commerce optimized) =====
+        # Tire brightening (gamma < 1 = brighter shadows)
+        self.tire_gamma = 0.78             # Lift dark rubber for tread visibility
+        self.tire_clahe_clip = 2.0         # CLAHE for local contrast (tread grooves)
+        self.tire_clahe_grid = 8           # CLAHE grid size
+        self.sharpness = 1.25             # Sharpening for tread detail
         
         # Label protection
         self.label_threshold = 200        # Brightness threshold for label detection
@@ -304,75 +300,76 @@ class ImageProcessorV3:
     
     def enhance_tire(self, img, image_type='front'):
         """
-        Minimal enhancement for a clean, professional look.
+        E-commerce optimized tire enhancement.
         
-        For front: very light contrast + sharpness, protect label
-        For side: slightly stronger contrast + sharpness, no label detection
+        Pipeline:
+        1. Composite on white background
+        2. Aggressive fringe cleanup (sharp edges)
+        3. Tire-only brightening (gamma) + local contrast (CLAHE)
+        4. Label protection (front images only)
+        5. Sharpen
+        6. Contact shadow for grounding
         """
         has_alpha = img.mode == 'RGBA'
         
-        # Separate alpha
+        # Step 1: Composite on white
         if has_alpha:
             r, g, b, a = img.split()
             rgb_img = Image.merge('RGB', (r, g, b))
             alpha_array = np.array(a)
+            bg = Image.new('RGB', img.size, (255, 255, 255))
+            composited = Image.composite(rgb_img, bg, Image.fromarray(alpha_array))
         else:
-            rgb_img = img.convert('RGB')
-            alpha_array = None
+            composited = img.convert('RGB')
         
-        original_array = np.array(rgb_img, dtype=np.uint8)
+        # Step 2: Fringe cleanup (sharp edges)
+        composited = self.cleanup_fringe(composited)
         
-        # Get enhancement parameters
-        if image_type == 'side':
-            contrast = self.side_contrast
-            sharpness = self.side_sharpness
-            brightness = self.side_brightness
-            label_mask = np.zeros(original_array.shape[:2], dtype=np.float32)
-            logger.info(f"Side image enhancement: contrast={contrast}, sharpness={sharpness}")
+        comp_arr = np.array(composited, dtype=np.uint8)
+        gray = cv2.cvtColor(comp_arr, cv2.COLOR_RGB2GRAY)
+        
+        # Step 3: Create tire mask (everything that's not white background)
+        tire_mask = (gray < 220).astype(np.float32)
+        tire_mask = cv2.GaussianBlur(tire_mask, (5, 5), 1.5)
+        
+        # Step 4: Label detection + protection (front only)
+        if image_type == 'front':
+            label_mask = self.detect_label_mask(comp_arr, None)
+            logger.info(f"Front image: label protection active")
         else:
-            contrast = self.front_contrast
-            sharpness = self.front_sharpness
-            brightness = self.front_brightness
-            label_mask = self.detect_label_mask(original_array, alpha_array)
-            logger.info(f"Front image enhancement: contrast={contrast}, sharpness={sharpness}")
+            label_mask = np.zeros(comp_arr.shape[:2], dtype=np.float32)
+            logger.info(f"Side image: no label protection")
         
-        tire_mask = 1.0 - label_mask
+        # Enhancement mask = tire minus label
+        enhance_mask = np.clip(tire_mask - label_mask, 0, 1)
         
-        # Apply enhancement to the whole image
-        enhanced_pil = rgb_img.copy()
+        # Step 5: Gamma correction (brighten dark rubber, tire-only)
+        enhanced = comp_arr.astype(np.float32)
+        for c in range(3):
+            channel = enhanced[:,:,c]
+            normalized = channel / 255.0
+            brightened = np.power(normalized, self.tire_gamma) * 255.0
+            enhanced[:,:,c] = brightened * enhance_mask + channel * (1 - enhance_mask)
         
-        if brightness != 1.0:
-            enhanced_pil = ImageEnhance.Brightness(enhanced_pil).enhance(brightness)
-        if contrast != 1.0:
-            enhanced_pil = ImageEnhance.Contrast(enhanced_pil).enhance(contrast)
-        if sharpness != 1.0:
-            enhanced_pil = ImageEnhance.Sharpness(enhanced_pil).enhance(sharpness)
+        # Step 6: CLAHE for local contrast (tread grooves pop, tire-only)
+        enhanced_uint8 = np.clip(enhanced, 0, 255).astype(np.uint8)
+        lab = cv2.cvtColor(enhanced_uint8, cv2.COLOR_RGB2LAB)
+        l_channel = lab[:,:,0]
+        clahe = cv2.createCLAHE(
+            clipLimit=self.tire_clahe_clip,
+            tileGridSize=(self.tire_clahe_grid, self.tire_clahe_grid)
+        )
+        l_enhanced = clahe.apply(l_channel)
+        # Blend CLAHE only on tire (not label, not bg)
+        l_blended = (l_enhanced.astype(np.float32) * enhance_mask + 
+                     l_channel.astype(np.float32) * (1 - enhance_mask))
+        lab[:,:,0] = np.clip(l_blended, 0, 255).astype(np.uint8)
+        enhanced_rgb = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
         
-        enhanced_array = np.array(enhanced_pil, dtype=np.uint8)
+        # Step 7: Sharpen
+        result = ImageEnhance.Sharpness(Image.fromarray(enhanced_rgb)).enhance(self.sharpness)
         
-        # Blend: enhanced tire + original label
-        if np.any(label_mask > 0):
-            label_mask_3ch = np.dstack([label_mask, label_mask, label_mask])
-            blended = (
-                enhanced_array.astype(np.float32) * (1 - label_mask_3ch * self.label_protection) +
-                original_array.astype(np.float32) * label_mask_3ch * self.label_protection
-            )
-            final_array = np.clip(blended, 0, 255).astype(np.uint8)
-        else:
-            final_array = enhanced_array
-        
-        final = Image.fromarray(final_array)
-        
-        # Composite on white background
-        if has_alpha and alpha_array is not None:
-            bg = Image.new('RGB', final.size, (255, 255, 255))
-            alpha_img = Image.fromarray(alpha_array)
-            result = Image.composite(final, bg, alpha_img)
-        else:
-            result = final
-        
-        # Post-compositing cleanup: remove gray fringe + add contact shadow
-        result = self.cleanup_fringe(result)
+        # Step 8: Contact shadow
         result = self.add_contact_shadow(result)
         
         return result
@@ -381,18 +378,18 @@ class ImageProcessorV3:
         """
         Remove the gray halo/fringe left by background removal.
         
-        After bg removal composites on white, the edge pixels are a gradient
-        from white to tire color (10+ pixels of gray). This pushes those
-        fringe pixels cleanly to white or tire, giving sharp edges.
+        Poof's bg removal leaves 8-10px of gray gradient at tire edges.
+        Uses distance transforms to classify fringe pixels and push them
+        cleanly to white (if closer to bg) or keep (if closer to tire).
         """
         arr = np.array(img)
         h, w = arr.shape[:2]
         gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY).astype(np.float32)
         
-        # Classify pixels
-        is_bg = gray > 248          # Pure white background
-        is_subject = gray < 120     # Definite tire rubber
-        is_fringe = (~is_bg) & (~is_subject)  # Gray in-between zone
+        # Classify pixels (tighter thresholds for aggressive cleanup)
+        is_bg = gray > 245          # Slightly lower to catch near-white fringe
+        is_subject = gray < 80      # Only clearly dark tire pixels
+        is_fringe = (~is_bg) & (~is_subject)
         
         if not np.any(is_fringe):
             return img
@@ -401,26 +398,24 @@ class ImageProcessorV3:
         bg_dist = cv2.distanceTransform((~is_bg).astype(np.uint8), cv2.DIST_L2, 5)
         subject_dist = cv2.distanceTransform((~is_subject).astype(np.uint8), cv2.DIST_L2, 5)
         
-        # Ratio: 0 = touching subject, 1 = touching background
+        # Ratio: 0 = at bg edge, 1 = at tire edge
         total_dist = bg_dist + subject_dist + 0.001
         bg_ratio = bg_dist / total_dist
         
-        # Fringe pixels closer to background get pushed to white
-        # Threshold at 0.45 (slightly favors keeping tire detail)
+        # Aggressive: push to white if even slightly closer to bg
         keep_mask = np.ones((h, w), dtype=np.float32)
-        push_to_white = (bg_ratio < 0.55) & is_fringe
+        push_to_white = (bg_ratio < 0.6) & is_fringe
         keep_mask[push_to_white] = 0.0
         
-        # Smooth transition (2-3px anti-aliasing)
-        keep_mask = cv2.GaussianBlur(keep_mask, (3, 3), 0.8)
+        # Minimal anti-aliasing (1px gaussian)
+        keep_mask = cv2.GaussianBlur(keep_mask, (3, 3), 0.5)
         
         # Apply
         white = np.full_like(arr, 255, dtype=np.float32)
         cleaned = arr.astype(np.float32) * keep_mask[:,:,np.newaxis] + white * (1 - keep_mask[:,:,np.newaxis])
         cleaned = np.clip(cleaned, 0, 255).astype(np.uint8)
         
-        fringe_cleaned = np.sum(push_to_white)
-        logger.info(f"Fringe cleanup: {fringe_cleaned} pixels cleaned")
+        logger.info(f"Fringe cleanup: {np.sum(push_to_white)} pixels cleaned")
         
         return Image.fromarray(cleaned)
     
@@ -587,15 +582,13 @@ class ImageProcessorV3:
         """Process with custom settings (for lab testing).
         
         Accepts both v2 and v3 setting names for backwards compatibility.
-        v2-specific settings (clahe_clip, shadow_lift, denoise, etc.) are ignored.
+        v2-specific settings (shadow_lift, denoise, etc.) are silently ignored.
         """
-        # Enhancement settings
-        self.front_contrast = settings.get('contrast', 1.08)
-        self.front_sharpness = settings.get('sharpness', 1.10)
-        self.front_brightness = settings.get('brightness', 1.0)
-        self.side_contrast = settings.get('side_contrast', settings.get('contrast', 1.12))
-        self.side_sharpness = settings.get('side_sharpness', settings.get('sharpness', 1.15))
-        self.side_brightness = settings.get('side_brightness', settings.get('brightness', 1.03))
+        # Enhancement settings (v3 tire-only approach)
+        self.tire_gamma = settings.get('tire_gamma', settings.get('gamma', 0.78))
+        self.tire_clahe_clip = settings.get('tire_clahe_clip', settings.get('clahe_clip', 2.0))
+        self.tire_clahe_grid = settings.get('tire_clahe_grid', settings.get('clahe_grid', 8))
+        self.sharpness = settings.get('sharpness', 1.25)
         
         # Label settings
         self.label_threshold = settings.get('label_threshold', 200)
