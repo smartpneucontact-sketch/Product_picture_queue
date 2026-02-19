@@ -48,8 +48,8 @@ class ImageProcessorV2:
         
         # NEW: Brightness normalization
         self.normalize_brightness = True  # Enable brightness normalization
-        self.target_brightness = 0.42     # Target average brightness (0-1), 0.42 = nice gray
-        self.brightness_tolerance = 0.05  # Don't adjust if within this range
+        self.target_brightness = 0.38     # Target average brightness (0-1), 0.38 = natural gray
+        self.brightness_tolerance = 0.08  # Don't adjust if within this range
         
         # Label protection (bright text areas)
         self.label_threshold = 200       # Brightness threshold for label detection
@@ -62,9 +62,9 @@ class ImageProcessorV2:
         self.denoise_strength = 3        # Noise reduction (0 = off)
         
         # Side image specific (more aggressive enhancement)
-        self.side_brightness_boost = 1.15  # Extra brightness for side images
-        self.side_contrast_boost = 1.15    # Extra contrast for side images
-        self.side_shadow_lift = 25         # More shadow lifting for sides
+        self.side_brightness_boost = 1.12  # Extra brightness for side images
+        self.side_contrast_boost = 1.12    # Extra contrast for side images
+        self.side_shadow_lift = 22         # More shadow lifting for sides
         
         # Crop settings
         self.margin_percent = 5
@@ -76,11 +76,11 @@ class ImageProcessorV2:
         self.fg_threshold = 240
         self.bg_threshold = 10
         
-        # Edge refinement settings (NEW)
+        # Edge refinement settings
         self.edge_refinement = True      # Enable edge smoothing
         self.edge_feather = 2            # Feather radius in pixels (1-5)
         self.edge_smooth = 3             # Gaussian blur on mask edges
-        self.edge_erode = 1              # Erode mask to remove fringe (0-3)
+        self.edge_erode = 3              # Erode mask MORE to remove gray fringe
         self.anti_alias = True           # Anti-alias the final edges
     
     # ==================== BACKGROUND REMOVAL ====================
@@ -517,13 +517,13 @@ class ImageProcessorV2:
             return img_array
         return cv2.fastNlMeansDenoisingColored(img_array, None, strength, strength, 7, 21)
     
-    def normalize_brightness_to_target(self, img_array, target=0.42, tolerance=0.05, mask=None):
+    def normalize_brightness_to_target(self, img_array, target=0.38, tolerance=0.08, mask=None):
         """
         Normalize image brightness to a target level for consistency.
         
         Args:
             img_array: RGB numpy array
-            target: Target average brightness (0-1), default 0.42 is good for tire rubber
+            target: Target average brightness (0-1), default 0.38 is good for tire rubber
             tolerance: Don't adjust if within this range of target
             mask: Optional alpha mask to only consider tire pixels (not background)
             
@@ -557,8 +557,15 @@ class ImageProcessorV2:
         else:
             adjustment = 1.0
         
-        # Limit adjustment to reasonable range (0.7 to 1.6)
-        adjustment = np.clip(adjustment, 0.7, 1.6)
+        # IMPORTANT: Limit adjustment more conservatively
+        # - Don't brighten too much (max 1.3x)
+        # - Allow more darkening (down to 0.7x) for overly bright images
+        if adjustment > 1.0:
+            # Brightening - be conservative
+            adjustment = min(adjustment, 1.25)
+        else:
+            # Darkening - allow more
+            adjustment = max(adjustment, 0.70)
         
         logger.info(f"Normalizing brightness: {current_brightness:.3f} -> {target:.3f} (factor: {adjustment:.2f})")
         
