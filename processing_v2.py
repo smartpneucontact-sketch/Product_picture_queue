@@ -724,8 +724,8 @@ class ImageProcessorV2:
         """
         width, height = size
         
-        # Base color: off-white (like a real studio backdrop)
-        base_color = 245  # Slightly off-white
+        # Base color: nearly white (subtle off-white)
+        base_color = 250  # Almost white
         
         # Create gradient array
         bg_array = np.ones((height, width, 3), dtype=np.float32) * base_color
@@ -734,14 +734,14 @@ class ImageProcessorV2:
         # Top gradient (darken top 15%)
         top_zone = int(height * 0.15)
         for y in range(top_zone):
-            darken = (1 - y / top_zone) * 15  # Up to 15 levels darker at very top
+            darken = (1 - y / top_zone) * 8  # Up to 8 levels darker at very top (was 15)
             bg_array[y, :, :] -= darken
         
-        # Bottom gradient (darken bottom 25% - like floor shadow)
-        bottom_start = int(height * 0.75)
+        # Bottom gradient (very subtle floor effect)
+        bottom_start = int(height * 0.80)
         for y in range(bottom_start, height):
             progress = (y - bottom_start) / (height - bottom_start)
-            darken = progress * 20  # Up to 20 levels darker at very bottom
+            darken = progress * 6  # Up to 6 levels darker at very bottom (was 10)
             bg_array[y, :, :] -= darken
         
         # If we have alpha, add a subtle ground shadow under the tire
@@ -760,15 +760,15 @@ class ImageProcessorV2:
                     center_x = (left_edge + right_edge) // 2
                     tire_width = right_edge - left_edge
                     
-                    # Create elliptical shadow
-                    shadow_height = int(height * 0.08)  # Shadow extends 8% of image height
-                    shadow_width = int(tire_width * 0.9)
+                    # Create elliptical shadow - VERY SUBTLE
+                    shadow_height = int(height * 0.03)  # Shadow extends only 3% of image height
+                    shadow_width = int(tire_width * 0.8)
                     
                     for y in range(tire_bottom, min(height, tire_bottom + shadow_height)):
                         # Distance from tire bottom (0 at tire, 1 at shadow edge)
                         y_dist = (y - tire_bottom) / shadow_height
-                        # Shadow fades out
-                        shadow_strength = (1 - y_dist) ** 2 * 25  # Max 25 levels darker
+                        # Shadow fades out - VERY LIGHT
+                        shadow_strength = (1 - y_dist) ** 2 * 5  # Max 5 levels darker only
                         
                         # Horizontal falloff (elliptical)
                         for x in range(width):
