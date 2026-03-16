@@ -939,7 +939,7 @@ class ImageProcessorV3:
             ideal_side = min(ideal_side, int(min_dim * 0.45))
             half = ideal_side // 2
         else:
-            half = int(min_dim * 0.30)
+            half = int(min_dim * 0.40)
         
         cy_adjusted = cy + int(half * 0.25) if gauge_type != 'dial' else cy
         
@@ -996,8 +996,8 @@ class ImageProcessorV3:
             return None, f"Low confidence orange detection ({conf:.2f})"
         
         min_dim = min(w, h)
-        crop_radius = int(min_dim * 0.30)
-        cy_adjusted = cy + int(crop_radius * 0.3)
+        crop_radius = int(min_dim * 0.40)
+        cy_adjusted = cy + int(crop_radius * 0.15)
         
         x1 = max(0, cx - crop_radius)
         x2 = min(w, cx + crop_radius)
@@ -1013,11 +1013,7 @@ class ImageProcessorV3:
         
         cropped = img.crop((x1, y1, x2, y2))
         
-        final = Image.new('RGB', (output_size, output_size), (255, 255, 255))
-        target_size = int(output_size * 0.9)
-        cropped_resized = cropped.resize((target_size, target_size), Image.LANCZOS)
-        offset = (output_size - target_size) // 2
-        final.paste(cropped_resized, (offset, offset))
+        final = cropped.resize((output_size, output_size), Image.LANCZOS)
         
         final = ImageEnhance.Contrast(final).enhance(1.1)
         final = ImageEnhance.Sharpness(final).enhance(1.2)
