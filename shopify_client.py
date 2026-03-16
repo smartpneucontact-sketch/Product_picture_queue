@@ -139,47 +139,37 @@ class ShopifyClient:
     
     def add_images_to_product_by_sku(self, sku, image_urls):
         """
-        Replace all images on a product identified by SKU.
-        Deletes existing images first, then uploads new ones in order.
+        Add images to a product identified by SKU.
+        Appends new images without deleting existing ones.
         Returns the product info and added images.
         """
         product_id, variant_id, product_title = self.find_product_by_sku(sku)
-        
+
         if not product_id:
             raise Exception(f"No product found with SKU: {sku}")
-        
-        # Delete existing images first
-        existing_images = self.get_product_images(product_id)
-        if existing_images:
-            deleted = self.delete_product_images(product_id, existing_images)
-            import logging
-            logging.getLogger(__name__).info(f"Deleted {deleted}/{len(existing_images)} existing images for SKU {sku}")
-        
-        # Upload new images in order (position 1, 2, 3...)
+
+        # Upload new images (appended after existing ones)
         added_images = []
         errors = []
-        
+
         for i, image_url in enumerate(image_urls):
             try:
-                position = i + 1
                 image = self.add_image_to_product(
-                    product_id, 
-                    image_url, 
-                    position=position,
-                    alt_text=f"{product_title} - Image {position}"
+                    product_id,
+                    image_url,
+                    alt_text=f"{product_title} - Image"
                 )
                 added_images.append(image)
             except Exception as e:
                 errors.append(f"Image {i+1}: {str(e)}")
-        
+
         if errors and not added_images:
             raise Exception(f"All image uploads failed: {'; '.join(errors)}")
-        
+
         return {
             'product_id': product_id,
             'product_title': product_title,
             'sku': sku,
             'images_added': len(added_images),
-            'images_deleted': len(existing_images) if existing_images else 0,
             'errors': errors if errors else None
         }
