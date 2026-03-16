@@ -939,7 +939,7 @@ class ImageProcessorV3:
             ideal_side = min(ideal_side, int(min_dim * 0.45))
             half = ideal_side // 2
         else:
-            half = int(min_dim * 0.15)
+            half = int(min_dim * 0.30)
         
         cy_adjusted = cy + int(half * 0.25) if gauge_type != 'dial' else cy
         
@@ -996,7 +996,7 @@ class ImageProcessorV3:
             return None, f"Low confidence orange detection ({conf:.2f})"
         
         min_dim = min(w, h)
-        crop_radius = int(min_dim * 0.15)
+        crop_radius = int(min_dim * 0.30)
         cy_adjusted = cy + int(crop_radius * 0.3)
         
         x1 = max(0, cx - crop_radius)
