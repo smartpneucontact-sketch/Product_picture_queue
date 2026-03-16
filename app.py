@@ -367,6 +367,83 @@ def gauge_crop():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/images/<int:image_id>/gauge-region', methods=['POST'])
+def gauge_region_crop(image_id):
+    """
+    Crop a manually selected region from the original image as gauge closeup.
+    Expects: {'x': 0, 'y': 0, 'width': 50, 'height': 50} as percentages (0-100)
+    Crops that region, makes it square, resizes, enhances, and saves as processed.
+    """
+    image_record = Image.query.get_or_404(image_id)
+    data = request.get_json()
+
+    x_pct = data.get('x', 0)
+    y_pct = data.get('y', 0)
+    w_pct = data.get('width', 100)
+    h_pct = data.get('height', 100)
+
+    try:
+        import requests as req
+        from PIL import Image as PILImage, ImageEnhance
+        from io import BytesIO
+
+        response = req.get(image_record.original_url)
+        img = PILImage.open(BytesIO(response.content)).convert('RGB')
+        iw, ih = img.size
+
+        # Convert percentages to pixels
+        x1 = int(iw * x_pct / 100)
+        y1 = int(ih * y_pct / 100)
+        x2 = int(iw * (x_pct + w_pct) / 100)
+        y2 = int(ih * (y_pct + h_pct) / 100)
+
+        # Crop the selected region
+        cropped = img.crop((x1, y1, x2, y2))
+
+        # Make it square (use the larger side, center the smaller)
+        cw, ch = cropped.size
+        side = max(cw, ch)
+        square = PILImage.new('RGB', (side, side), (255, 255, 255))
+        paste_x = (side - cw) // 2
+        paste_y = (side - ch) // 2
+        square.paste(cropped, (paste_x, paste_y))
+
+        # Resize to output size
+        processor = get_processor()
+        output_size = processor.output_size
+        final = square.resize((output_size, output_size), PILImage.Resampling.LANCZOS)
+
+        # Light enhancement
+        final = ImageEnhance.Sharpness(final).enhance(1.3)
+        final = ImageEnhance.Contrast(final).enhance(1.05)
+
+        output = BytesIO()
+        final.save(output, format='JPEG', quality=98, subsampling=0)
+        output.seek(0)
+
+        # Upload
+        storage = get_storage()
+        closeup_filename = f"gauge_{image_record.original_filename}"
+        closeup_url = storage.upload_processed_image(output.getvalue(), closeup_filename)
+
+        # Update image record
+        image_record.processed_url = closeup_url
+        image_record.image_type = 'gauge'
+        image_record.status = 'processed'
+        image_record.processed_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Gauge region cropped',
+            'closeup_url': closeup_url
+        })
+
+    except Exception as e:
+        logger.error(f"Gauge region crop failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/images/<int:image_id>/crop-region', methods=['POST'])
 def set_crop_region(image_id):
     """

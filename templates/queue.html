@@ -1237,17 +1237,42 @@
             const y = Math.min(cropStartY, cropEndY);
             const w = Math.abs(cropEndX - cropStartX);
             const h = Math.abs(cropEndY - cropStartY);
-            
+
             if (w < 10 || h < 10) {
                 showToast('Draw a larger selection', 'error');
                 return;
             }
-            
+
             const xPct = (x / cropCanvas.width) * 100;
             const yPct = (y / cropCanvas.height) * 100;
             const wPct = (w / cropCanvas.width) * 100;
             const hPct = (h / cropCanvas.height) * 100;
-            
+
+            if (gaugeCropMode) {
+                // Gauge mode: directly crop and save
+                try {
+                    showToast('Cropping gauge area...', 'info');
+                    const response = await fetch(`/api/images/${gaugeCropImageId}/gauge-region`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ x: xPct, y: yPct, width: wPct, height: hPct })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        showToast('Gauge crop saved!', 'success');
+                        closeCropModal();
+                        loadImages();
+                    } else {
+                        showToast(result.error || 'Failed', 'error');
+                    }
+                } catch (error) {
+                    showToast('Gauge crop failed', 'error');
+                }
+                gaugeCropMode = false;
+                gaugeCropImageId = null;
+                return;
+            }
+
             try {
                 const response = await fetch(`/api/images/${cropImageId}/crop-region`, {
                     method: 'POST',
@@ -1269,88 +1294,39 @@
         
         function closeCropModal() {
             if (cropModal) cropModal.style.display = 'none';
+            gaugeCropMode = false;
+            gaugeCropImageId = null;
+            // Reset instruction text
+            if (cropModal) {
+                const instruction = cropModal.querySelector('p');
+                instruction.textContent = 'Draw a box around the area to KEEP (drag from corner to corner)';
+                const confirmBtn = document.getElementById('cropConfirm');
+                confirmBtn.textContent = '✓ Apply Crop';
+            }
         }
         
         async function gaugeCrop(id, btn) {
-            const origText = btn.textContent;
-            btn.textContent = '⏳ Detecting...';
-            btn.disabled = true;
-            
-            try {
-                const response = await fetch('/api/gauge-crop', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_id: id })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showToast('✅ Gauge closeup created', 'success');
-                    loadImages();
-                } else {
-                    showToast(result.error + '. Click on gauge in image to crop manually.', 'error');
-                    startManualGaugeCrop(id);
-                }
-            } catch (error) {
-                console.error('Gauge crop error:', error);
-                showToast('Gauge crop failed: ' + error.message, 'error');
-            }
-            
-            btn.textContent = origText;
-            btn.disabled = false;
+            // Go straight to manual selection
+            startManualGaugeCrop(id);
         }
         
+        let gaugeCropMode = false;
+        let gaugeCropImageId = null;
+
         function startManualGaugeCrop(imageId) {
             const img = allImages.find(i => i.id === imageId);
             if (!img) return;
-            
-            const lightbox = document.getElementById('lightbox');
-            const lightboxImg = document.getElementById('lightboxImg');
-            const instruction = document.getElementById('lightboxInstruction');
-            
-            lightboxImg.src = img.original_url;
-            lightbox.classList.add('show');
-            instruction.style.display = 'block';
-            lightboxImg.style.cursor = 'crosshair';
-            
-            // Remove any old handlers
-            const newImg = lightboxImg.cloneNode(true);
-            lightboxImg.parentNode.replaceChild(newImg, lightboxImg);
-            
-            newImg.style.cursor = 'crosshair';
-            newImg.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                instruction.style.display = 'none';
-                newImg.style.cursor = '';
-                
-                const rect = newImg.getBoundingClientRect();
-                const scaleX = newImg.naturalWidth / rect.width;
-                const scaleY = newImg.naturalHeight / rect.height;
-                const x = Math.round((e.clientX - rect.left) * scaleX);
-                const y = Math.round((e.clientY - rect.top) * scaleY);
-                
-                lightbox.classList.remove('show');
-                showToast('Creating closeup...', 'info');
-                
-                try {
-                    const response = await fetch('/api/gauge-crop', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ image_id: imageId, x: x, y: y })
-                    });
-                    
-                    const result = await response.json();
-                    if (result.success) {
-                        showToast('Gauge closeup created!', 'success');
-                        loadImages();
-                    } else {
-                        showToast(result.error, 'error');
-                    }
-                } catch (error) {
-                    showToast('Manual crop failed', 'error');
-                }
-            }, { once: true });
+
+            // Use the crop region modal but in gauge mode
+            gaugeCropMode = true;
+            gaugeCropImageId = imageId;
+            startCropRegion(imageId, img.original_url);
+
+            // Update the instruction text and button
+            const instruction = cropModal.querySelector('p');
+            instruction.textContent = 'Draw a square around the gauge area you want to crop';
+            const confirmBtn = document.getElementById('cropConfirm');
+            confirmBtn.textContent = '✓ Crop Gauge';
         }
         
         // Filter tabs
