@@ -200,8 +200,7 @@ def manual_upload():
 def assign_sku():
     """
     Assign SKU(s) to selected images and start processing.
-    Supports multiple comma-separated SKUs: 'SKU1, SKU2'
-    Each extra SKU creates a duplicate image record sharing the same original/processed URLs.
+    Supports multiple comma-separated SKUs stored on the same image.
     Expects: {'image_ids': [1, 2, 3], 'sku': 'ABC123' or 'ABC123, DEF456'}
     """
     data = request.get_json()
@@ -214,47 +213,26 @@ def assign_sku():
     if not sku_raw:
         return jsonify({'error': 'SKU is required'}), 400
 
-    # Parse multiple SKUs
     skus = [s.strip() for s in sku_raw.split(',') if s.strip()]
     if not skus:
         return jsonify({'error': 'SKU is required'}), 400
 
+    sku_str = ', '.join(skus)
     images = Image.query.filter(Image.id.in_(image_ids)).all()
-    all_process_ids = []
 
-    # First SKU: assign to original images
     for image in images:
-        image.sku = skus[0]
+        image.sku = sku_str
         image.status = 'assigned'
         image.assigned_at = datetime.utcnow()
-        all_process_ids.append(image.id)
-
-    # Additional SKUs: duplicate image records
-    for extra_sku in skus[1:]:
-        for image in images:
-            dup = Image(
-                original_filename=image.original_filename,
-                original_url=image.original_url,
-                processed_url=image.processed_url,
-                sku=extra_sku,
-                status='assigned',
-                image_type=image.image_type,
-                assigned_at=datetime.utcnow()
-            )
-            db.session.add(dup)
-            db.session.flush()  # get the id
-            all_process_ids.append(dup.id)
 
     db.session.commit()
 
-    # Start processing in background thread
-    thread = threading.Thread(target=process_images, args=(all_process_ids, app, True))
+    thread = threading.Thread(target=process_images, args=(image_ids, app, True))
     thread.start()
 
-    sku_label = ', '.join(skus)
     return jsonify({
         'success': True,
-        'message': f'Processing {len(images)} images for SKU(s): {sku_label}'
+        'message': f'Processing {len(images)} images for SKU(s): {sku_str}'
     })
 
 
@@ -262,7 +240,7 @@ def assign_sku():
 def draft_sku():
     """
     Assign SKU(s) to selected images WITHOUT processing or uploading.
-    Supports multiple comma-separated SKUs.
+    Supports multiple comma-separated SKUs stored on the same image.
     Expects: {'image_ids': [1, 2, 3], 'sku': 'ABC123' or 'ABC123, DEF456'}
     """
     data = request.get_json()
@@ -279,34 +257,19 @@ def draft_sku():
     if not skus:
         return jsonify({'error': 'SKU is required'}), 400
 
+    sku_str = ', '.join(skus)
     images = Image.query.filter(Image.id.in_(image_ids)).all()
 
-    # First SKU: assign to original images
     for image in images:
-        image.sku = skus[0]
+        image.sku = sku_str
         image.status = 'draft'
         image.assigned_at = datetime.utcnow()
 
-    # Additional SKUs: duplicate image records as drafts
-    for extra_sku in skus[1:]:
-        for image in images:
-            dup = Image(
-                original_filename=image.original_filename,
-                original_url=image.original_url,
-                processed_url=image.processed_url,
-                sku=extra_sku,
-                status='draft',
-                image_type=image.image_type,
-                assigned_at=datetime.utcnow()
-            )
-            db.session.add(dup)
-
     db.session.commit()
 
-    sku_label = ', '.join(skus)
     return jsonify({
         'success': True,
-        'message': f'Saved {len(images)} images as draft with SKU(s): {sku_label}'
+        'message': f'Saved {len(images)} images as draft with SKU(s): {sku_str}'
     })
 
 
@@ -733,32 +696,35 @@ def process_images(image_ids, app, upload_to_shopify=True):
         
         # Upload all processed images to Shopify (only if SKU assigned and flag is True)
         if upload_to_shopify and processed_urls:
-            # Group images by SKU for separate Shopify uploads
-            sku_groups = {}
+            # Collect all unique SKUs from all images (supports comma-separated)
+            all_skus = set()
             for image in images:
                 if image.sku and image.status == 'processed':
-                    if image.sku not in sku_groups:
-                        sku_groups[image.sku] = []
-                    if image.processed_url:
-                        sku_groups[image.sku].append(image)
+                    for s in image.sku.split(','):
+                        s = s.strip()
+                        if s:
+                            all_skus.add(s)
 
-            for sku, sku_images in sku_groups.items():
-                sku_urls = [img.processed_url for img in sku_images]
+            shopify = get_shopify()
+            upload_errors = []
+
+            for sku in all_skus:
                 try:
-                    shopify = get_shopify()
-                    result = shopify.add_images_to_product_by_sku(sku, sku_urls)
-
-                    for image in sku_images:
-                        image.status = 'completed'
-                    db.session.commit()
-                    logger.info(f"Shopify upload success for SKU {sku}: {len(sku_urls)} images")
-
+                    result = shopify.add_images_to_product_by_sku(sku, processed_urls)
+                    logger.info(f"Shopify upload success for SKU {sku}: {len(processed_urls)} images")
                 except Exception as e:
                     logger.error(f"Shopify upload failed for SKU {sku}: {e}")
-                    for image in sku_images:
+                    upload_errors.append(f"SKU {sku}: {str(e)}")
+
+            # Mark images as completed or failed
+            for image in images:
+                if image.status == 'processed':
+                    if upload_errors:
                         image.status = 'failed'
-                        image.error_message = f"Shopify upload failed: {str(e)}"
-                    db.session.commit()
+                        image.error_message = f"Shopify upload failed: {'; '.join(upload_errors)}"
+                    else:
+                        image.status = 'completed'
+            db.session.commit()
         # If not uploading to Shopify, leave status as 'processed' (not 'completed')
 
 
