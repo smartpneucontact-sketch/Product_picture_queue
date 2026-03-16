@@ -1199,15 +1199,6 @@
             cropEndX = e.clientX - rect.left;
             cropEndY = e.clientY - rect.top;
 
-            // In gauge mode, force square selection
-            if (gaugeCropMode) {
-                const dx = cropEndX - cropStartX;
-                const dy = cropEndY - cropStartY;
-                const side = Math.max(Math.abs(dx), Math.abs(dy));
-                cropEndX = cropStartX + (dx >= 0 ? side : -side);
-                cropEndY = cropStartY + (dy >= 0 ? side : -side);
-            }
-
             // Redraw image and selection box
             cropCtx.drawImage(cropImg, 0, 0, cropCanvas.width, cropCanvas.height);
 
@@ -1230,7 +1221,7 @@
             cropCtx.fill('evenodd');
 
             // Draw border
-            cropCtx.strokeStyle = gaugeCropMode ? '#FF9800' : '#4CAF50';
+            cropCtx.strokeStyle = '#4CAF50';
             cropCtx.lineWidth = 2;
             cropCtx.strokeRect(x, y, w, h);
         }
@@ -1245,7 +1236,6 @@
         }
         
         async function confirmCrop() {
-            // Calculate percentages
             const x = Math.min(cropStartX, cropEndX);
             const y = Math.min(cropStartY, cropEndY);
             const w = Math.abs(cropEndX - cropStartX);
@@ -1260,31 +1250,6 @@
             const yPct = (y / cropCanvas.height) * 100;
             const wPct = (w / cropCanvas.width) * 100;
             const hPct = (h / cropCanvas.height) * 100;
-
-            if (gaugeCropMode) {
-                // Gauge mode: directly crop and save
-                try {
-                    showToast('Cropping gauge area...', 'info');
-                    const response = await fetch(`/api/images/${gaugeCropImageId}/gauge-region`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ x: xPct, y: yPct, width: wPct, height: hPct })
-                    });
-                    const result = await response.json();
-                    if (result.success) {
-                        showToast('Gauge crop saved!', 'success');
-                        closeCropModal();
-                        loadImages();
-                    } else {
-                        showToast(result.error || 'Failed', 'error');
-                    }
-                } catch (error) {
-                    showToast('Gauge crop failed', 'error');
-                }
-                gaugeCropMode = false;
-                gaugeCropImageId = null;
-                return;
-            }
 
             try {
                 const response = await fetch(`/api/images/${cropImageId}/crop-region`, {
@@ -1304,42 +1269,161 @@
                 showToast('Failed to set crop', 'error');
             }
         }
-        
+
         function closeCropModal() {
             if (cropModal) cropModal.style.display = 'none';
-            gaugeCropMode = false;
-            gaugeCropImageId = null;
-            // Reset instruction text
-            if (cropModal) {
-                const instruction = cropModal.querySelector('p');
-                instruction.textContent = 'Draw a box around the area to KEEP (drag from corner to corner)';
-                const confirmBtn = document.getElementById('cropConfirm');
-                confirmBtn.textContent = '✓ Apply Crop';
-            }
         }
         
         async function gaugeCrop(id, btn) {
-            // Go straight to manual selection
             startManualGaugeCrop(id);
         }
-        
-        let gaugeCropMode = false;
-        let gaugeCropImageId = null;
+
+        // ===== Gauge Square Crop Tool =====
+        let gaugeModal = null;
+        let gaugeImg = null;
+        let gaugeImageId = null;
+        let gaugeSquare = { x: 0, y: 0, size: 200 };
+        let gaugeDrag = null; // null | 'move' | 'resize'
+        let gaugeDragStart = { mx: 0, my: 0, sx: 0, sy: 0, ss: 0 };
+        let gaugeScale = 1;
 
         function startManualGaugeCrop(imageId) {
-            const img = allImages.find(i => i.id === imageId);
-            if (!img) return;
+            const imgData = allImages.find(i => i.id === imageId);
+            if (!imgData) return;
+            gaugeImageId = imageId;
 
-            // Use the crop region modal but in gauge mode
-            gaugeCropMode = true;
-            gaugeCropImageId = imageId;
-            startCropRegion(imageId, img.original_url);
+            if (!gaugeModal) {
+                gaugeModal = document.createElement('div');
+                gaugeModal.id = 'gaugeModal';
+                gaugeModal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:1001;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+                gaugeModal.innerHTML = `
+                    <p style="color:#FF9800;margin-bottom:10px;font-size:16px;font-weight:600;">Move and resize the orange square over the gauge area</p>
+                    <div id="gaugeContainer" style="position:relative;display:inline-block;cursor:default;max-width:90vw;max-height:72vh;overflow:hidden;">
+                        <img id="gaugeImgEl" style="display:block;max-width:90vw;max-height:72vh;user-select:none;" draggable="false" />
+                        <div id="gaugeDarkOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></div>
+                        <div id="gaugeSquareEl" style="position:absolute;border:3px solid #FF9800;background:rgba(255,152,0,0.08);cursor:move;box-shadow:0 0 0 9999px rgba(0,0,0,0.55);">
+                            <div id="gaugeResizeHandle" style="position:absolute;bottom:-6px;right:-6px;width:18px;height:18px;background:#FF9800;border-radius:50%;cursor:nwse-resize;border:2px solid white;"></div>
+                        </div>
+                    </div>
+                    <div style="margin-top:15px;display:flex;gap:10px;align-items:center;">
+                        <button id="gaugeConfirmBtn" class="btn btn-primary" style="background:#FF9800;border-color:#FF9800;font-size:16px;padding:10px 24px;">✓ Crop Gauge</button>
+                        <button id="gaugeCancelBtn" class="btn btn-secondary" style="font-size:16px;padding:10px 24px;">✕ Cancel</button>
+                        <span style="color:#aaa;margin-left:15px;font-size:13px;">Drag square to move · Drag orange dot to resize</span>
+                    </div>
+                `;
+                document.body.appendChild(gaugeModal);
 
-            // Update the instruction text and button
-            const instruction = cropModal.querySelector('p');
-            instruction.textContent = 'Draw a square around the gauge area you want to crop';
-            const confirmBtn = document.getElementById('cropConfirm');
-            confirmBtn.textContent = '✓ Crop Gauge';
+                document.getElementById('gaugeConfirmBtn').addEventListener('click', confirmGaugeCrop);
+                document.getElementById('gaugeCancelBtn').addEventListener('click', closeGaugeModal);
+
+                const square = document.getElementById('gaugeSquareEl');
+                const handle = document.getElementById('gaugeResizeHandle');
+
+                square.addEventListener('mousedown', (e) => {
+                    if (e.target === handle) return;
+                    e.preventDefault();
+                    gaugeDrag = 'move';
+                    gaugeDragStart = { mx: e.clientX, my: e.clientY, sx: gaugeSquare.x, sy: gaugeSquare.y, ss: gaugeSquare.size };
+                });
+
+                handle.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    gaugeDrag = 'resize';
+                    gaugeDragStart = { mx: e.clientX, my: e.clientY, sx: gaugeSquare.x, sy: gaugeSquare.y, ss: gaugeSquare.size };
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!gaugeDrag) return;
+                    const container = document.getElementById('gaugeContainer');
+                    const maxW = container.offsetWidth;
+                    const maxH = container.offsetHeight;
+
+                    if (gaugeDrag === 'move') {
+                        let nx = gaugeDragStart.sx + (e.clientX - gaugeDragStart.mx);
+                        let ny = gaugeDragStart.sy + (e.clientY - gaugeDragStart.my);
+                        nx = Math.max(0, Math.min(nx, maxW - gaugeSquare.size));
+                        ny = Math.max(0, Math.min(ny, maxH - gaugeSquare.size));
+                        gaugeSquare.x = nx;
+                        gaugeSquare.y = ny;
+                    } else if (gaugeDrag === 'resize') {
+                        const dx = e.clientX - gaugeDragStart.mx;
+                        const dy = e.clientY - gaugeDragStart.my;
+                        const delta = Math.max(dx, dy);
+                        let ns = Math.max(50, gaugeDragStart.ss + delta);
+                        ns = Math.min(ns, maxW - gaugeSquare.x, maxH - gaugeSquare.y);
+                        gaugeSquare.size = ns;
+                    }
+                    updateGaugeSquare();
+                });
+
+                document.addEventListener('mouseup', () => { gaugeDrag = null; });
+            }
+
+            gaugeModal.style.display = 'flex';
+
+            const imgEl = document.getElementById('gaugeImgEl');
+            imgEl.onload = function() {
+                const container = document.getElementById('gaugeContainer');
+                gaugeScale = imgEl.naturalWidth / imgEl.offsetWidth;
+
+                // Initial square: 30% of image, centered
+                const initSize = Math.min(imgEl.offsetWidth, imgEl.offsetHeight) * 0.3;
+                gaugeSquare.size = initSize;
+                gaugeSquare.x = (imgEl.offsetWidth - initSize) / 2;
+                gaugeSquare.y = (imgEl.offsetHeight - initSize) / 2;
+                updateGaugeSquare();
+            };
+            imgEl.onerror = function() {
+                imgEl.src = '/api/proxy-image?url=' + encodeURIComponent(imgData.original_url);
+            };
+            imgEl.src = imgData.original_url;
+        }
+
+        function updateGaugeSquare() {
+            const el = document.getElementById('gaugeSquareEl');
+            if (!el) return;
+            el.style.left = gaugeSquare.x + 'px';
+            el.style.top = gaugeSquare.y + 'px';
+            el.style.width = gaugeSquare.size + 'px';
+            el.style.height = gaugeSquare.size + 'px';
+        }
+
+        async function confirmGaugeCrop() {
+            const imgEl = document.getElementById('gaugeImgEl');
+            if (!imgEl || !gaugeImageId) return;
+
+            const scaleX = imgEl.naturalWidth / imgEl.offsetWidth;
+            const scaleY = imgEl.naturalHeight / imgEl.offsetHeight;
+
+            const xPct = (gaugeSquare.x / imgEl.offsetWidth) * 100;
+            const yPct = (gaugeSquare.y / imgEl.offsetHeight) * 100;
+            const wPct = (gaugeSquare.size / imgEl.offsetWidth) * 100;
+            const hPct = (gaugeSquare.size / imgEl.offsetHeight) * 100;
+
+            try {
+                showToast('Cropping gauge area...', 'info');
+                const response = await fetch(`/api/images/${gaugeImageId}/gauge-region`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x: xPct, y: yPct, width: wPct, height: hPct })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Gauge crop saved!', 'success');
+                    closeGaugeModal();
+                    loadImages();
+                } else {
+                    showToast(result.error || 'Failed', 'error');
+                }
+            } catch (error) {
+                showToast('Gauge crop failed', 'error');
+            }
+        }
+
+        function closeGaugeModal() {
+            if (gaugeModal) gaugeModal.style.display = 'none';
+            gaugeImageId = null;
         }
         
         // Filter tabs
