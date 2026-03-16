@@ -1198,20 +1198,29 @@
             const rect = cropCanvas.getBoundingClientRect();
             cropEndX = e.clientX - rect.left;
             cropEndY = e.clientY - rect.top;
-            
+
+            // In gauge mode, force square selection
+            if (gaugeCropMode) {
+                const dx = cropEndX - cropStartX;
+                const dy = cropEndY - cropStartY;
+                const side = Math.max(Math.abs(dx), Math.abs(dy));
+                cropEndX = cropStartX + (dx >= 0 ? side : -side);
+                cropEndY = cropStartY + (dy >= 0 ? side : -side);
+            }
+
             // Redraw image and selection box
             cropCtx.drawImage(cropImg, 0, 0, cropCanvas.width, cropCanvas.height);
-            
+
             // Darken outside selection
             cropCtx.fillStyle = 'rgba(0,0,0,0.5)';
             cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-            
+
             // Clear selection area (show original)
             const x = Math.min(cropStartX, cropEndX);
             const y = Math.min(cropStartY, cropEndY);
             const w = Math.abs(cropEndX - cropStartX);
             const h = Math.abs(cropEndY - cropStartY);
-            
+
             cropCtx.clearRect(x, y, w, h);
             cropCtx.drawImage(cropImg, 0, 0, cropCanvas.width, cropCanvas.height);
             cropCtx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -1219,9 +1228,9 @@
             cropCtx.rect(0, 0, cropCanvas.width, cropCanvas.height);
             cropCtx.rect(x, y, w, h);
             cropCtx.fill('evenodd');
-            
+
             // Draw border
-            cropCtx.strokeStyle = '#4CAF50';
+            cropCtx.strokeStyle = gaugeCropMode ? '#FF9800' : '#4CAF50';
             cropCtx.lineWidth = 2;
             cropCtx.strokeRect(x, y, w, h);
         }
