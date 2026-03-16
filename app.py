@@ -574,10 +574,10 @@ def process_images(image_ids, app, upload_to_shopify=True):
                     except Exception as crop_err:
                         logger.warning(f"Failed to apply crop region: {crop_err}")
                 
-                # Process image (bg removal + crop)
-                # Side images skip label detection, front images find max 1 label
+                # Process image (no bg removal by default — just clean square crop)
+                # Background removal can be re-enabled per image if needed
                 image_type = image.image_type or 'front'
-                processed_data = processor.process(original_data, image_type=image_type)
+                processed_data = processor.process(original_data, image_type=image_type, remove_bg=False)
                 
                 # Upload processed image to Cloudinary
                 processed_url = storage.upload_processed_image(processed_data, image.original_filename)

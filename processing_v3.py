@@ -539,48 +539,97 @@ class ImageProcessorV3:
         return canvas
     
     # ==================== MAIN PIPELINE ====================
-    
-    def process(self, image_data, bg_method=None, image_type='front'):
+
+    def process_clean(self, image_data, image_type='front'):
+        """
+        Clean processing pipeline — no background removal.
+
+        Just crops to a centered square, applies light enhancement,
+        and outputs a clean product photo.
+
+        Pipeline:
+        1. Open image
+        2. Crop to 1:1 square (centered on content)
+        3. Light enhancement (sharpness + contrast)
+        4. Resize to output size
+        5. Return as PIL Image
+        """
+        logger.info(f"Clean processing (no bg removal) for {image_type}")
+
+        if isinstance(image_data, bytes):
+            img = Image.open(BytesIO(image_data))
+        else:
+            img = image_data
+
+        img = img.convert('RGB')
+        w, h = img.size
+
+        # Crop to square (center crop)
+        if w != h:
+            side = min(w, h)
+            left = (w - side) // 2
+            top = (h - side) // 2
+            img = img.crop((left, top, left + side, top + side))
+            logger.info(f"Center-cropped {w}x{h} -> {side}x{side}")
+
+        # Resize to output size
+        if img.size[0] != self.output_size:
+            img = img.resize((self.output_size, self.output_size), Image.Resampling.LANCZOS)
+            logger.info(f"Resized to {self.output_size}x{self.output_size}")
+
+        # Light enhancement
+        img = ImageEnhance.Sharpness(img).enhance(self.sharpness)
+        img = ImageEnhance.Contrast(img).enhance(1.05)
+
+        return img
+
+    def process(self, image_data, bg_method=None, image_type='front', remove_bg=False):
         """
         Full processing pipeline for front and side images.
-        
-        Pipeline:
+
+        Pipeline (with bg removal):
         1. Remove background (Poof/rembg)
         2. Crop to square with edge cleanup
         3. Minimal enhancement (protect label for front)
         4. Composite on white background
         5. Output high-quality JPEG
-        
+
+        Pipeline (without bg removal — default):
+        1. Center-crop to square
+        2. Light enhancement (sharpness + contrast)
+        3. Output high-quality JPEG
+
         Args:
             image_data: Raw JPEG bytes from camera
             bg_method: Override bg removal method
             image_type: 'front', 'side', or 'gauge'
-        
+            remove_bg: Whether to remove background (default False)
+
         Returns:
             JPEG bytes
         """
-        logger.info(f"Processing {image_type} image ({len(image_data)} bytes)")
-        
-        # Step 1: Remove background
-        no_bg_data = self.remove_background(image_data, method=bg_method)
-        
-        # Step 2: Crop to square (includes edge cleanup)
-        square_img = self.crop_to_square(no_bg_data)
-        
-        # Step 3: Enhance + composite on white
-        final_img = self.enhance_tire(square_img, image_type=image_type)
-        
-        # Step 4: Output JPEG
+        logger.info(f"Processing {image_type} image ({len(image_data)} bytes), remove_bg={remove_bg}")
+
+        if remove_bg:
+            # Full pipeline with background removal
+            no_bg_data = self.remove_background(image_data, method=bg_method)
+            square_img = self.crop_to_square(no_bg_data)
+            final_img = self.enhance_tire(square_img, image_type=image_type)
+        else:
+            # Clean pipeline: just crop to square + light enhancement
+            final_img = self.process_clean(image_data, image_type=image_type)
+
+        # Output JPEG
         output = BytesIO()
         final_img.save(output, format='JPEG', quality=98, subsampling=0)
         output.seek(0)
-        
+
         logger.info(f"Processing complete: {self.output_size}x{self.output_size} JPEG")
         return output.getvalue()
     
     def process_with_settings(self, image_data, settings):
         """Process with custom settings (for lab testing).
-        
+
         Accepts both v2 and v3 setting names for backwards compatibility.
         v2-specific settings (shadow_lift, denoise, etc.) are silently ignored.
         """
@@ -589,46 +638,45 @@ class ImageProcessorV3:
         self.tire_clahe_clip = settings.get('tire_clahe_clip', settings.get('clahe_clip', 2.0))
         self.tire_clahe_grid = settings.get('tire_clahe_grid', settings.get('clahe_grid', 8))
         self.sharpness = settings.get('sharpness', 1.25)
-        
+
         # Label settings
         self.label_threshold = settings.get('label_threshold', 200)
         self.label_protection = settings.get('label_protection', 1.0)
-        
+
         # Crop settings
         self.margin_percent = settings.get('margin_percent', settings.get('margin', 4))
         self.output_size = settings.get('output_size', 2048)
-        
+
         # Background removal settings
         self.alpha_matting = settings.get('alpha_matting', False)
         self.erode_size = settings.get('erode_size', 10)
         self.fg_threshold = settings.get('fg_threshold', 240)
         self.bg_threshold = settings.get('bg_threshold', 10)
-        
+
         # Edge cleanup settings
         self.edge_erode = settings.get('edge_erode', 1)
         self.edge_smooth = settings.get('edge_smooth', 2)
         self.edge_feather = settings.get('edge_feather', 1)
-        
-        remove_bg = settings.get('remove_bg', True)
+
+        remove_bg = settings.get('remove_bg', False)
         bg_method = settings.get('bg_method', 'auto')
         image_type = settings.get('image_type', 'front')
-        
+
         if remove_bg:
             no_bg_data = self.remove_background(image_data, method=bg_method)
             img = Image.open(BytesIO(no_bg_data))
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+            square_img = self.crop_to_square(img)
+            enhanced_img = self.enhance_tire(square_img, image_type=image_type)
         else:
-            img = Image.open(BytesIO(image_data))
-        
-        if img.mode != 'RGBA':
-            img = img.convert('RGBA')
-        
-        square_img = self.crop_to_square(img)
-        enhanced_img = self.enhance_tire(square_img, image_type=image_type)
-        
+            # Clean pipeline: center-crop + light enhancement
+            enhanced_img = self.process_clean(image_data, image_type=image_type)
+
         output = BytesIO()
         enhanced_img.save(output, format='JPEG', quality=98, subsampling=0)
         output.seek(0)
-        
+
         return output.getvalue()
     
     # ==================== GAUGE METHODS (unchanged from v2) ====================
