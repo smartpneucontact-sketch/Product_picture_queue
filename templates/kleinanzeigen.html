@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kleinanzeigen Filler — SmartPneu Studio</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .header h1 { font-size: 26px; }
+        .header a {
+            color: #8BC34A;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .subtitle { color: #888; font-size: 14px; margin-top: 4px; }
+
+        .card {
+            background: #252540;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            font-size: 17px;
+            margin-bottom: 15px;
+            color: #8BC34A;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+        .form-row label {
+            min-width: 130px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        input, select, textarea {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid #333;
+            border-radius: 8px;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #8BC34A;
+        }
+        textarea { resize: vertical; min-height: 140px; }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-green { background: #8BC34A; color: #000; }
+        .btn-green:hover:not(:disabled) { background: #9CCC65; }
+        .btn-orange { background: #FF9800; color: #000; }
+        .btn-orange:hover:not(:disabled) { background: #FFB74D; }
+        .btn-blue { background: #2196F3; color: #fff; }
+        .btn-blue:hover:not(:disabled) { background: #42A5F5; }
+        .btn-secondary { background: #444; color: #fff; }
+        .btn-secondary:hover:not(:disabled) { background: #555; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+
+        .lookup-row {
+            display: flex;
+            gap: 10px;
+        }
+        .lookup-row input { flex: 1; font-size: 16px; padding: 12px 16px; }
+
+        .images-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        .images-row img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 2px solid #333;
+        }
+        .img-select {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+        .img-select input[type="checkbox"] {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: 18px;
+            height: 18px;
+            z-index: 2;
+            accent-color: #FF9800;
+            flex: none;
+        }
+        .img-select img {
+            transition: border-color 0.2s;
+        }
+        .img-select.selected img {
+            border-color: #FF9800;
+        }
+
+        .preview-box {
+            background: #1a1a2e;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .instructions {
+            background: #2d2d4a;
+            border: 2px dashed #FF9800;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+        .instructions p {
+            color: #ccc;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .instructions strong { color: #FF9800; }
+        kbd {
+            background: #444;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid #666;
+        }
+
+        .step {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #FF9800;
+            color: #000;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 600;
+            z-index: 1000;
+            opacity: 1;
+            transition: opacity 0.3s;
+        }
+        .toast-success { background: #4CAF50; }
+        .toast-error { background: #f44336; }
+        .toast-info { background: #2196F3; }
+
+        .hidden { display: none; }
+
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>Kleinanzeigen Filler</h1>
+                <p class="subtitle">Reifen-Anzeigen schnell erstellen</p>
+            </div>
+            <a href="/">← Zurück zum Studio</a>
+        </div>
+
+        <!-- Step 1: SKU Lookup -->
+        <div class="card">
+            <h2><span class="step">1</span> SKU eingeben</h2>
+            <div class="lookup-row">
+                <input type="text" id="skuInput" placeholder="SKU eingeben (z.B. 1532)..."
+                       onkeydown="if(event.key==='Enter') lookupSKU()">
+                <button class="btn btn-green" onclick="lookupSKU()">Suchen</button>
+            </div>
+            <div id="productInfo" class="hidden" style="margin-top:12px;color:#aaa;font-size:13px;"></div>
+            <div id="processedImagesSection" class="hidden" style="margin-top:15px;">
+                <label style="color:#FF9800;font-size:14px;font-weight:600;">Bilder auswählen (für Kleinanzeigen Upload):</label>
+                <div id="processedImages" class="images-row" style="margin-top:8px;"></div>
+                <div style="margin-top:6px;color:#888;font-size:12px;">Ausgewählte Bilder werden automatisch hochgeladen.</div>
+            </div>
+        </div>
+
+        <!-- Step 2: Edit -->
+        <div class="card hidden" id="editCard">
+            <h2><span class="step">2</span> Daten bearbeiten</h2>
+            <div class="two-col">
+                <div class="form-row">
+                    <label>Marke</label>
+                    <input type="text" id="brand" placeholder="Continental">
+                </div>
+                <div class="form-row">
+                    <label>Modell</label>
+                    <input type="text" id="model" placeholder="SportContact 5">
+                </div>
+                <div class="form-row">
+                    <label>Größe</label>
+                    <input type="text" id="size" placeholder="245/40 R19">
+                </div>
+                <div class="form-row">
+                    <label>Anzahl</label>
+                    <input type="text" id="quantity" value="2">
+                </div>
+                <div class="form-row">
+                    <label>Last/Speed</label>
+                    <input type="text" id="loadSpeed" placeholder="98Y">
+                </div>
+                <div class="form-row">
+                    <label>Profiltiefe (mm)</label>
+                    <input type="text" id="treadDepth" placeholder="6.80">
+                </div>
+                <div class="form-row">
+                    <label>DOT</label>
+                    <input type="text" id="dot" placeholder="07/18">
+                </div>
+                <div class="form-row">
+                    <label>Saison</label>
+                    <select id="season">
+                        <option value="Sommer">Sommer</option>
+                        <option value="Winter">Winter</option>
+                        <option value="Ganzjahres">Ganzjahres</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row" style="margin-top:8px;">
+                <label>Preis (EUR)</label>
+                <input type="text" id="price" placeholder="89" style="max-width:150px;">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-green" onclick="generatePreview()">Vorschau generieren</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Preview & Copy -->
+        <div class="card hidden" id="previewCard">
+            <h2><span class="step">3</span> Vorschau & Ausfüllen</h2>
+
+            <div class="form-row">
+                <label>Titel</label>
+                <input type="text" id="previewTitle">
+            </div>
+            <div class="form-row">
+                <label>Preis (EUR)</label>
+                <input type="text" id="previewPrice" style="max-width:150px;">
+            </div>
+            <label style="color:#aaa;font-size:14px;">Beschreibung</label>
+            <textarea id="previewDesc" style="margin-top:6px;"></textarea>
+
+            <div class="btn-group">
+                <button class="btn btn-orange" onclick="copyFillScript()">
+                    📋 Auto-Fill Script kopieren
+                </button>
+                <button class="btn btn-blue" onclick="openKleinanzeigen()">
+                    🔗 Kleinanzeigen öffnen
+                </button>
+            </div>
+
+            <div class="instructions">
+                <p>
+                    <strong>1.</strong> Bearbeite Titel/Beschreibung oben falls nötig<br>
+                    <strong>2.</strong> Klick auf "Auto-Fill Script kopieren"<br>
+                    <strong>3.</strong> Öffne Kleinanzeigen (oder klick den Button)<br>
+                    <strong>4.</strong> Drücke <kbd>F12</kbd> → Console Tab<br>
+                    <strong>5.</strong> <kbd>Ctrl+V</kbd> einfügen → <kbd>Enter</kbd><br>
+                    <strong>6.</strong> Titel, Preis & Beschreibung werden ausgefüllt!<br>
+                    <span style="color:#888;font-size:12px;">Kategorie und Bilder bitte manuell setzen.</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedImageUrls = [];
+
+        function toggleImage(checkbox, url) {
+            const wrapper = checkbox.closest('.img-select');
+            if (checkbox.checked) {
+                wrapper.classList.add('selected');
+                if (!selectedImageUrls.includes(url)) selectedImageUrls.push(url);
+            } else {
+                wrapper.classList.remove('selected');
+                selectedImageUrls = selectedImageUrls.filter(u => u !== url);
+            }
+        }
+
+        function getFields() {
+            return {
+                brand: document.getElementById('brand').value.trim(),
+                model: document.getElementById('model').value.trim(),
+                size: document.getElementById('size').value.trim(),
+                quantity: document.getElementById('quantity').value.trim() || '2',
+                loadSpeed: document.getElementById('loadSpeed').value.trim(),
+                treadDepth: document.getElementById('treadDepth').value.trim(),
+                dot: document.getElementById('dot').value.trim(),
+                season: document.getElementById('season').value,
+                price: document.getElementById('price').value.trim(),
+            };
+        }
+
+        function buildTitle(f) {
+            let parts = [f.quantity + 'x'];
+            if (f.brand) parts.push(f.brand);
+            if (f.model) parts.push(f.model);
+            if (f.size) parts.push(f.size);
+            if (f.loadSpeed) parts.push(f.loadSpeed);
+            return parts.join(' ');
+        }
+
+        function buildDescription(f) {
+            let lines = [];
+            lines.push(`Verkaufe ${f.quantity} Stück ${f.brand} ${f.model} Reifen.`);
+            lines.push('');
+            if (f.size) lines.push(`Größe: ${f.size}`);
+            if (f.loadSpeed) lines.push(`Last/Geschwindigkeit: ${f.loadSpeed}`);
+            if (f.treadDepth) lines.push(`Profiltiefe: ${f.treadDepth} mm`);
+            if (f.dot) lines.push(`DOT: ${f.dot}`);
+            lines.push(`Saison: ${f.season}`);
+            lines.push(`Zustand: Gebraucht`);
+            lines.push('');
+            lines.push('Bei Fragen gerne melden!');
+            lines.push('Versand möglich.');
+            return lines.join('\n');
+        }
+
+        async function lookupSKU() {
+            const sku = document.getElementById('skuInput').value.trim();
+            if (!sku) return;
+
+            try {
+                showToast('Suche SKU ' + sku + '...', 'info');
+                const resp = await fetch('/api/product-lookup', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({sku})
+                });
+                const data = await resp.json();
+
+                if (!data.success) {
+                    showToast(data.error || 'Nicht gefunden', 'error');
+                    return;
+                }
+
+                // Parse product title to extract tire info
+                const title = data.title || '';
+                const tags = data.tags || [];
+
+                // Try to parse brand/model/size from title
+                // Common format: "2x Continental SportContact 5 245/40 R19 98Y"
+                const sizeMatch = title.match(/(\d{3}\/\d{2}\s*R?\s*\d{2})/);
+                const qtyMatch = title.match(/^(\d)x\s*/);
+                const loadMatch = title.match(/R\d{2}\s+(\d{2,3}[A-Z])/);
+
+                // Extract brand and model from title (after quantity, before size)
+                let brand = '', model = '';
+                let cleanTitle = title.replace(/^\d+x\s*/, '');
+                if (sizeMatch) {
+                    const beforeSize = cleanTitle.substring(0, cleanTitle.indexOf(sizeMatch[0])).trim();
+                    const words = beforeSize.split(/\s+/);
+                    if (words.length >= 1) brand = words[0];
+                    if (words.length >= 2) model = words.slice(1).join(' ');
+                }
+
+                // Fill form fields
+                document.getElementById('brand').value = brand;
+                document.getElementById('model').value = model;
+                document.getElementById('size').value = sizeMatch ? sizeMatch[1] : '';
+                document.getElementById('quantity').value = qtyMatch ? qtyMatch[1] : '2';
+                document.getElementById('loadSpeed').value = loadMatch ? loadMatch[1] : '';
+                document.getElementById('price').value = data.price ? Math.round(parseFloat(data.price)) : '';
+
+                // Season from tags
+                for (const tag of tags) {
+                    const tl = tag.toLowerCase();
+                    if (tl === 'winter') document.getElementById('season').value = 'Winter';
+                    else if (tl === 'sommer') document.getElementById('season').value = 'Sommer';
+                    else if (tl.includes('ganzjahr') || tl.includes('allwetter')) document.getElementById('season').value = 'Ganzjahres';
+                }
+
+                // Show product info
+                document.getElementById('productInfo').textContent = `Shopify: ${data.title} — ${data.price} EUR`;
+                document.getElementById('productInfo').classList.remove('hidden');
+
+                // Show processed images with selection checkboxes
+                selectedImageUrls = [];
+                const procImages = data.processed_images || [];
+                const shopifyImages = data.images || [];
+                const allImages = procImages.length > 0
+                    ? procImages.map(i => i.url)
+                    : shopifyImages;
+
+                if (allImages.length > 0) {
+                    const container = document.getElementById('processedImages');
+                    container.innerHTML = allImages.map((url, idx) => `
+                        <label class="img-select selected">
+                            <input type="checkbox" checked onchange="toggleImage(this, '${url}')">
+                            <img src="${url}" alt="tire ${idx+1}">
+                        </label>
+                    `).join('');
+                    selectedImageUrls = [...allImages];
+                    document.getElementById('processedImagesSection').classList.remove('hidden');
+                }
+
+                document.getElementById('editCard').classList.remove('hidden');
+                showToast('Produkt gefunden: ' + data.title, 'success');
+
+                // Auto-generate preview
+                generatePreview();
+
+            } catch (err) {
+                showToast('Fehler: ' + err.message, 'error');
+            }
+        }
+
+        function generatePreview() {
+            const f = getFields();
+            document.getElementById('previewTitle').value = buildTitle(f);
+            document.getElementById('previewPrice').value = f.price;
+            document.getElementById('previewDesc').value = buildDescription(f);
+            document.getElementById('previewCard').classList.remove('hidden');
+        }
+
+        function copyFillScript() {
+            const title = document.getElementById('previewTitle').value.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            const price = document.getElementById('previewPrice').value;
+            const desc = document.getElementById('previewDesc').value.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
+            const imageUrlsJson = JSON.stringify(selectedImageUrls);
+
+            const script = `(async function(){
+  /* === Fill text fields === */
+  function setVal(el,val){
+    if(!el)return;
+    var s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+    if(!s)s=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value');
+    if(s&&s.set)s.set.call(el,val);
+    else el.value=val;
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+    el.dispatchEvent(new Event('blur',{bubbles:true}));
+  }
+  setVal(document.getElementById('postad-title'),'${title}');
+  setVal(document.getElementById('pstad-price'),'${price}');
+  var d=document.getElementById('pstad-descrptn');
+  if(d){d.value='${desc}';d.dispatchEvent(new Event('input',{bubbles:true}));d.dispatchEvent(new Event('change',{bubbles:true}));}
+  console.log('Text fields filled!');
+
+  /* === Upload images === */
+  var imageUrls=${imageUrlsJson};
+  if(imageUrls.length>0){
+    console.log('Uploading '+imageUrls.length+' images...');
+    var fileInput=document.querySelector('input[type="file"][accept*="image"]');
+    if(!fileInput){console.error('File input not found');alert('Formular ausgefüllt! Bilder-Upload nicht möglich.');return;}
+    var dt=new DataTransfer();
+    for(var i=0;i<imageUrls.length;i++){
+      try{
+        console.log('Fetching image '+(i+1)+'/'+imageUrls.length);
+        var resp=await fetch(imageUrls[i]);
+        var blob=await resp.blob();
+        var ext=blob.type.includes('png')?'.png':'.jpg';
+        var file=new File([blob],'tire_'+(i+1)+ext,{type:blob.type});
+        dt.items.add(file);
+      }catch(e){console.error('Failed to fetch image:',e);}
+    }
+    if(dt.files.length>0){
+      fileInput.files=dt.files;
+      fileInput.dispatchEvent(new Event('change',{bubbles:true}));
+      console.log(dt.files.length+' images uploaded!');
+    }
+  }
+  alert('Formular ausgefüllt! '+(imageUrls.length>0?imageUrls.length+' Bilder hochgeladen.':'Bitte Bilder manuell hochladen.')+' Kategorie bitte manuell setzen.');
+})();`;
+
+            navigator.clipboard.writeText(script).then(() => {
+                showToast('Script kopiert! Jetzt in Kleinanzeigen Console einfügen.', 'success');
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = script;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast('Script kopiert!', 'success');
+            });
+        }
+
+        function openKleinanzeigen() {
+            window.open('https://www.kleinanzeigen.de/p-anzeige-aufgeben-schritt2.html', '_blank');
+        }
+
+        function showToast(msg, type) {
+            const toast = document.createElement('div');
+            toast.className = 'toast toast-' + type;
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; }, 2500);
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+</html>

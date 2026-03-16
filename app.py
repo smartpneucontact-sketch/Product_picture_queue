@@ -988,6 +988,92 @@ def lab():
     return render_template('lab.html')
 
 
+@app.route('/kleinanzeigen')
+def kleinanzeigen():
+    """Kleinanzeigen auto-fill tool."""
+    return render_template('kleinanzeigen.html')
+
+
+@app.route('/api/product-lookup', methods=['POST'])
+def product_lookup():
+    """Look up full product data from Shopify by SKU for Kleinanzeigen listing."""
+    data = request.get_json()
+    sku = data.get('sku', '').strip()
+    if not sku:
+        return jsonify({'error': 'SKU required'}), 400
+
+    try:
+        shopify = get_shopify()
+
+        # Extended GraphQL query to get full product data
+        query = """
+        query findProduct($query: String!) {
+            productVariants(first: 1, query: $query) {
+                edges {
+                    node {
+                        id
+                        sku
+                        price
+                        title
+                        product {
+                            id
+                            title
+                            description
+                            productType
+                            tags
+                            images(first: 10) {
+                                edges {
+                                    node {
+                                        url
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        result = shopify._graphql(query, {'query': f'sku:{sku}'})
+        edges = result.get('productVariants', {}).get('edges', [])
+
+        if not edges:
+            return jsonify({'error': f'No product found for SKU: {sku}'}), 404
+
+        node = edges[0]['node']
+        product = node['product']
+        images = [e['node']['url'] for e in product.get('images', {}).get('edges', [])]
+
+        return jsonify({
+            'success': True,
+            'sku': node['sku'],
+            'price': node['price'],
+            'variant_title': node['title'],
+            'title': product['title'],
+            'description': product.get('description', ''),
+            'product_type': product.get('productType', ''),
+            'tags': product.get('tags', []),
+            'images': images,
+        }
+
+        # Also get processed images from SmartPneu database for this SKU
+        local_images = Image.query.filter(
+            Image.sku.contains(sku),
+            Image.processed_url.isnot(None)
+        ).order_by(Image.created_at.desc()).limit(10).all()
+
+        if local_images:
+            resp_data['processed_images'] = [
+                {'url': img.processed_url, 'type': img.image_type, 'filename': img.original_filename}
+                for img in local_images
+            ]
+
+        return jsonify(resp_data)
+    except Exception as e:
+        logger.error(f"Product lookup failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/health')
 def health():
     """Health check endpoint for Railway."""
