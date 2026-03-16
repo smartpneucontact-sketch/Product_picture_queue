@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template, redirect, url_for, Response
 from datetime import datetime
 from config import Config
 from models import db, Image
@@ -299,6 +299,20 @@ def process_drafts():
         'success': True,
         'message': f'Processing {len(images)} draft images'
     })
+
+
+@app.route('/api/proxy-image')
+def proxy_image():
+    """Proxy an image URL to avoid CORS issues for canvas drawing."""
+    import requests as req
+    url = request.args.get('url')
+    if not url:
+        return 'Missing url', 400
+    try:
+        response = req.get(url, timeout=15)
+        return Response(response.content, mimetype=response.headers.get('Content-Type', 'image/jpeg'))
+    except Exception as e:
+        return str(e), 500
 
 
 @app.route('/api/gauge-crop', methods=['POST'])

@@ -1164,18 +1164,22 @@
             
             // Load image
             cropImg = new Image();
-            cropImg.crossOrigin = 'anonymous';
             cropImg.onload = function() {
                 // Scale to fit screen
                 const maxW = window.innerWidth * 0.9;
                 const maxH = window.innerHeight * 0.7;
                 let scale = Math.min(maxW / cropImg.width, maxH / cropImg.height, 1);
-                
+
                 cropCanvas.width = cropImg.width * scale;
                 cropCanvas.height = cropImg.height * scale;
                 cropCanvas.dataset.scale = scale;
-                
+
                 cropCtx.drawImage(cropImg, 0, 0, cropCanvas.width, cropCanvas.height);
+            };
+            cropImg.onerror = function() {
+                console.error('Failed to load image for crop:', imageUrl);
+                // Try loading through proxy
+                cropImg.src = '/api/proxy-image?url=' + encodeURIComponent(imageUrl);
             };
             cropImg.src = imageUrl;
             
