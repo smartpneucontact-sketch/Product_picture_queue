@@ -1031,13 +1031,13 @@
                 const response = await fetch(`/api/images/${id}/reprocess`, { method: 'POST' });
                 const result = await response.json();
                 if (result.success) {
-                    showToast('Reprocessing from original...', 'success');
+                    showToast('Reset — choose Process or Gauge', 'success');
                     loadImages();
                 } else {
-                    showToast(result.error || 'Reprocess failed', 'error');
+                    showToast(result.error || 'Reset failed', 'error');
                 }
             } catch (error) {
-                showToast('Reprocess failed', 'error');
+                showToast('Reset failed', 'error');
             }
         }
         

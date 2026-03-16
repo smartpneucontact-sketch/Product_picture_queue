@@ -639,19 +639,16 @@ def retry_image(image_id):
 
 @app.route('/api/images/<int:image_id>/reprocess', methods=['POST'])
 def reprocess_queue_image(image_id):
-    """Clear processed version and reprocess from original."""
+    """Clear processed version so user can choose how to reprocess (front/gauge)."""
     image = Image.query.get_or_404(image_id)
-    
-    # Clear processed version
+
+    # Clear processed version — don't auto-process, let user choose
     image.processed_url = None
-    image.status = 'assigned'
+    image.status = 'pending'
     image.error_message = None
+    image.image_type = 'front'  # Reset to default
     db.session.commit()
-    
-    # Start processing
-    thread = threading.Thread(target=process_images, args=([image_id], app, False))
-    thread.start()
-    
+
     return jsonify({'success': True})
 
 
