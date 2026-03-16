@@ -1044,7 +1044,7 @@ def product_lookup():
         product = node['product']
         images = [e['node']['url'] for e in product.get('images', {}).get('edges', [])]
 
-        return jsonify({
+        resp_data = {
             'success': True,
             'sku': node['sku'],
             'price': node['price'],
