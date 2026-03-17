@@ -1005,7 +1005,7 @@ def product_lookup():
     try:
         shopify = get_shopify()
 
-        # Extended GraphQL query to get full product data
+        # Extended GraphQL query with metafields for tire data
         query = """
         query findProduct($query: String!) {
             productVariants(first: 1, query: $query) {
@@ -1020,6 +1020,7 @@ def product_lookup():
                             title
                             description
                             productType
+                            vendor
                             tags
                             images(first: 10) {
                                 edges {
@@ -1028,6 +1029,14 @@ def product_lookup():
                                     }
                                 }
                             }
+                            tread_depth: metafield(namespace: "custom", key: "tread_depth") { value }
+                            rayon: metafield(namespace: "custom", key: "rayon") { value }
+                            hauteur: metafield(namespace: "custom", key: "hauteur") { value }
+                            largeur: metafield(namespace: "custom", key: "largeur") { value }
+                            dot: metafield(namespace: "custom", key: "dot") { value }
+                            speed_index: metafield(namespace: "custom", key: "speed_index") { value }
+                            load_index: metafield(namespace: "custom", key: "load_index") { value }
+                            model: metafield(namespace: "custom", key: "model") { value }
                         }
                     }
                 }
@@ -1044,6 +1053,17 @@ def product_lookup():
         product = node['product']
         images = [e['node']['url'] for e in product.get('images', {}).get('edges', [])]
 
+        # Extract metafield values
+        def mf(key):
+            val = product.get(key)
+            return val.get('value', '') if val else ''
+
+        # Build size from largeur/hauteur/rayon (e.g. 245/40 R19)
+        largeur = mf('largeur')
+        hauteur = mf('hauteur')
+        rayon = mf('rayon')
+        size = f"{largeur}/{hauteur} R{rayon}" if largeur and hauteur and rayon else ''
+
         resp_data = {
             'success': True,
             'sku': node['sku'],
@@ -1052,8 +1072,21 @@ def product_lookup():
             'title': product['title'],
             'description': product.get('description', ''),
             'product_type': product.get('productType', ''),
+            'vendor': product.get('vendor', ''),
             'tags': product.get('tags', []),
             'images': images,
+            'tire_data': {
+                'brand': product.get('vendor', ''),
+                'model': mf('model'),
+                'size': size,
+                'largeur': largeur,
+                'hauteur': hauteur,
+                'rayon': rayon,
+                'tread_depth': mf('tread_depth'),
+                'dot': mf('dot'),
+                'speed_index': mf('speed_index'),
+                'load_index': mf('load_index'),
+            },
         }
 
         # Also get processed images from SmartPneu database for this SKU

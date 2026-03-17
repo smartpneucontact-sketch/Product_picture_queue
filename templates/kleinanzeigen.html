@@ -385,33 +385,26 @@
                     return;
                 }
 
-                // Parse product title to extract tire info
-                const title = data.title || '';
+                // Use tire_data from Shopify metafields
+                const td = data.tire_data || {};
                 const tags = data.tags || [];
+                const title = data.title || '';
 
-                // Try to parse brand/model/size from title
-                // Common format: "2x Continental SportContact 5 245/40 R19 98Y"
-                const sizeMatch = title.match(/(\d{3}\/\d{2}\s*R?\s*\d{2})/);
-                const qtyMatch = title.match(/^(\d)x\s*/);
-                const loadMatch = title.match(/R\d{2}\s+(\d{2,3}[A-Z])/);
-
-                // Extract brand and model from title (after quantity, before size)
-                let brand = '', model = '';
-                let cleanTitle = title.replace(/^\d+x\s*/, '');
-                if (sizeMatch) {
-                    const beforeSize = cleanTitle.substring(0, cleanTitle.indexOf(sizeMatch[0])).trim();
-                    const words = beforeSize.split(/\s+/);
-                    if (words.length >= 1) brand = words[0];
-                    if (words.length >= 2) model = words.slice(1).join(' ');
-                }
-
-                // Fill form fields
-                document.getElementById('brand').value = brand;
-                document.getElementById('model').value = model;
-                document.getElementById('size').value = sizeMatch ? sizeMatch[1] : '';
-                document.getElementById('quantity').value = qtyMatch ? qtyMatch[1] : '2';
-                document.getElementById('loadSpeed').value = loadMatch ? loadMatch[1] : '';
+                // Fill form fields from metafields
+                document.getElementById('brand').value = td.brand || '';
+                document.getElementById('model').value = td.model || '';
+                document.getElementById('size').value = td.size || '';
+                document.getElementById('treadDepth').value = td.tread_depth || '';
+                document.getElementById('dot').value = td.dot || '';
                 document.getElementById('price').value = data.price ? Math.round(parseFloat(data.price)) : '';
+
+                // Build load/speed from metafields
+                const loadSpeed = [td.load_index, td.speed_index].filter(Boolean).join('');
+                document.getElementById('loadSpeed').value = loadSpeed;
+
+                // Try quantity from title
+                const qtyMatch = title.match(/^(\d)x\s*/);
+                document.getElementById('quantity').value = qtyMatch ? qtyMatch[1] : '2';
 
                 // Season from tags
                 for (const tag of tags) {
