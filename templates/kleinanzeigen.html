@@ -465,7 +465,18 @@
             document.getElementById('previewCard').classList.remove('hidden');
         }
 
+        function collectSelectedImages() {
+            // Rebuild selectedImageUrls from currently checked checkboxes
+            // (browser may restore checkbox state after refresh but JS array resets)
+            selectedImageUrls = [];
+            document.querySelectorAll('#processedImages input[type="checkbox"]:checked').forEach(cb => {
+                const img = cb.closest('.img-select')?.querySelector('img');
+                if (img && img.src) selectedImageUrls.push(img.src);
+            });
+        }
+
         function copyFillScript() {
+            collectSelectedImages();
             const title = document.getElementById('previewTitle').value.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
             const priceRaw = document.getElementById('previewPrice').value;
             // Kleinanzeigen expects integer price
