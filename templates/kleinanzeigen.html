@@ -513,9 +513,19 @@
     d.dispatchEvent(new Event('input',{bubbles:true}));
     d.dispatchEvent(new Event('change',{bubbles:true}));
   }
-  /* Versand: set to "Versand möglich" */
-  var versandSel=document.getElementById('autoteile_reifen.versand_s');
-  if(versandSel){versandSel.value='ja';versandSel.dispatchEvent(new Event('change',{bubbles:true}));}
+  /* Versand: set to "Versand möglich" (retry — dropdown appears after category is selected) */
+  function trySetVersand(){
+    var v=document.getElementById('autoteile_reifen.versand_s');
+    if(v){v.value='ja';v.dispatchEvent(new Event('change',{bubbles:true}));console.log('Versand set!');return true;}
+    return false;
+  }
+  if(!trySetVersand()){
+    var versandAttempts=0;
+    var versandTimer=setInterval(function(){
+      versandAttempts++;
+      if(trySetVersand()||versandAttempts>20){clearInterval(versandTimer);}
+    },1000);
+  }
   console.log('Text fields filled!');
 
   /* === Upload images (one at a time for Plupload) === */
