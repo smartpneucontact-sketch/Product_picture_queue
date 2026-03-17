@@ -339,6 +339,7 @@
                 dot: document.getElementById('dot').value.trim(),
                 season: document.getElementById('season').value,
                 price: document.getElementById('price').value.trim(),
+                sku: document.getElementById('skuInput').value.trim(),
             };
         }
 
@@ -367,6 +368,8 @@
             lines.push('Versand in ganz Deutschland möglich \u{1F1E9}\u{1F1EA}.');
             lines.push('');
             lines.push('Ich antworte sehr schnell, daher können Sie mich bei Fragen gerne jederzeit kontaktieren.');
+            lines.push('');
+            if (f.sku) lines.push(`SKU: ${f.sku}`);
             return lines.join('\n');
         }
 
