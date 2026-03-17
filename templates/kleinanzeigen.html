@@ -261,9 +261,9 @@
                 <div class="form-row">
                     <label>Saison</label>
                     <select id="season">
-                        <option value="Sommer">Sommer</option>
-                        <option value="Winter">Winter</option>
-                        <option value="Ganzjahres">Ganzjahres</option>
+                        <option value="Sommerreifen">Sommerreifen</option>
+                        <option value="Winterreifen">Winterreifen</option>
+                        <option value="Allwetterreifen">Allwetterreifen</option>
                     </select>
                 </div>
             </div>
@@ -343,27 +343,30 @@
         }
 
         function buildTitle(f) {
+            // Format: 4x Sommerreifen 215/60 R17 96H Michelin Primacy 4 'inkl. Montage'
             let parts = [f.quantity + 'x'];
-            if (f.brand) parts.push(f.brand);
-            if (f.model) parts.push(f.model);
+            if (f.season) parts.push(f.season);
             if (f.size) parts.push(f.size);
             if (f.loadSpeed) parts.push(f.loadSpeed);
+            if (f.brand) parts.push(f.brand);
+            if (f.model) parts.push(f.model);
+            parts.push("'inkl. Montage'");
             return parts.join(' ');
         }
 
         function buildDescription(f) {
             let lines = [];
-            lines.push(`Verkaufe ${f.quantity} Stück ${f.brand} ${f.model} Reifen.`);
+            lines.push(`Hallo, ich verkaufe ${f.quantity} ${f.season} der Marke ${f.brand} ${f.model} in der Größe ${f.size} ${f.loadSpeed}.`);
             lines.push('');
-            if (f.size) lines.push(`Größe: ${f.size}`);
-            if (f.loadSpeed) lines.push(`Last/Geschwindigkeit: ${f.loadSpeed}`);
-            if (f.treadDepth) lines.push(`Profiltiefe: ${f.treadDepth} mm`);
-            if (f.dot) lines.push(`DOT: ${f.dot}`);
-            lines.push(`Saison: ${f.season}`);
-            lines.push(`Zustand: Gebraucht`);
+            lines.push('Montage und Auswuchten sind im Preis inbegriffen.');
             lines.push('');
-            lines.push('Bei Fragen gerne melden!');
-            lines.push('Versand möglich.');
+            lines.push(`Die Profiltiefe der Reifen beträgt ${f.treadDepth} mm.`);
+            lines.push('');
+            lines.push(`DOT der Reifen sind ${f.dot}`);
+            lines.push('');
+            lines.push('Versand in ganz Deutschland möglich \u{1F1E9}\u{1F1EA}.');
+            lines.push('');
+            lines.push('Ich antworte sehr schnell, daher können Sie mich bei Fragen gerne jederzeit kontaktieren.');
             return lines.join('\n');
         }
 
@@ -406,12 +409,14 @@
                 const qtyMatch = title.match(/^(\d)x\s*/);
                 document.getElementById('quantity').value = qtyMatch ? qtyMatch[1] : '2';
 
-                // Season from tags
-                for (const tag of tags) {
-                    const tl = tag.toLowerCase();
-                    if (tl === 'winter') document.getElementById('season').value = 'Winter';
-                    else if (tl === 'sommer') document.getElementById('season').value = 'Sommer';
-                    else if (tl.includes('ganzjahr') || tl.includes('allwetter')) document.getElementById('season').value = 'Ganzjahres';
+                // Season from product_type (French → German compound word)
+                const productType = (data.product_type || '').toLowerCase();
+                if (productType.includes('été') || productType.includes('ete')) {
+                    document.getElementById('season').value = 'Sommerreifen';
+                } else if (productType.includes('hiver') || productType.includes('hier')) {
+                    document.getElementById('season').value = 'Winterreifen';
+                } else if (productType.includes('4 saison') || productType.includes('saisons')) {
+                    document.getElementById('season').value = 'Allwetterreifen';
                 }
 
                 // Show product info
