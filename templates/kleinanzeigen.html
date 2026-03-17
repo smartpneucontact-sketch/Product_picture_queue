@@ -460,33 +460,47 @@
         function generatePreview() {
             const f = getFields();
             document.getElementById('previewTitle').value = buildTitle(f);
-            document.getElementById('previewPrice').value = f.price;
+            document.getElementById('previewPrice').value = Math.round(parseFloat(f.price) || 0);
             document.getElementById('previewDesc').value = buildDescription(f);
             document.getElementById('previewCard').classList.remove('hidden');
         }
 
         function copyFillScript() {
             const title = document.getElementById('previewTitle').value.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-            const price = document.getElementById('previewPrice').value;
+            const priceRaw = document.getElementById('previewPrice').value;
+            // Kleinanzeigen expects integer price
+            const price = Math.round(parseFloat(priceRaw) || 0).toString();
             const desc = document.getElementById('previewDesc').value.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
-            const imageUrlsJson = JSON.stringify(selectedImageUrls);
+            // Proxy image URLs through our server to avoid CORS issues
+            const proxyBase = '{{ request.url_root }}api/proxy-image?url=';
+            const proxiedUrls = selectedImageUrls.map(u => proxyBase + encodeURIComponent(u));
+            const imageUrlsJson = JSON.stringify(proxiedUrls);
 
             const script = `(async function(){
   /* === Fill text fields === */
   function setVal(el,val){
     if(!el)return;
-    var s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
-    if(!s)s=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value');
-    if(s&&s.set)s.set.call(el,val);
+    var nativeSetter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+    if(!nativeSetter)nativeSetter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value');
+    if(nativeSetter&&nativeSetter.set)nativeSetter.set.call(el,val);
     else el.value=val;
     el.dispatchEvent(new Event('input',{bubbles:true}));
     el.dispatchEvent(new Event('change',{bubbles:true}));
     el.dispatchEvent(new Event('blur',{bubbles:true}));
   }
   setVal(document.getElementById('postad-title'),'${title}');
+  /* Price: set both legacy and React micro-frontend inputs */
   setVal(document.getElementById('pstad-price'),'${price}');
+  var mfPrice=document.getElementById('micro-frontend-price');
+  if(mfPrice) setVal(mfPrice,'${price}');
   var d=document.getElementById('pstad-descrptn');
-  if(d){d.value='${desc}';d.dispatchEvent(new Event('input',{bubbles:true}));d.dispatchEvent(new Event('change',{bubbles:true}));}
+  if(d){
+    var taSetter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value');
+    if(taSetter&&taSetter.set)taSetter.set.call(d,'${desc}');
+    else d.value='${desc}';
+    d.dispatchEvent(new Event('input',{bubbles:true}));
+    d.dispatchEvent(new Event('change',{bubbles:true}));
+  }
   console.log('Text fields filled!');
 
   /* === Upload images === */
