@@ -483,7 +483,8 @@
             const price = Math.round(parseFloat(priceRaw) || 0).toString();
             const desc = document.getElementById('previewDesc').value.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
             // Proxy image URLs through our server to avoid CORS issues
-            const proxyBase = '{{ request.url_root }}api/proxy-image?url=';
+            // Force https:// since Railway terminates SSL at load balancer (Flask sees http://)
+            const proxyBase = '{{ request.url_root }}'.replace('http://', 'https://') + 'api/proxy-image?url=';
             const proxiedUrls = selectedImageUrls.map(u => proxyBase + encodeURIComponent(u));
             const imageUrlsJson = JSON.stringify(proxiedUrls);
 
