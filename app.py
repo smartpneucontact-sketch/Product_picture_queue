@@ -1104,6 +1104,10 @@ def product_lookup():
                 {'url': img.processed_url, 'type': img.image_type, 'filename': img.original_filename}
                 for img in local_images
             ]
+            resp_data['original_images'] = [
+                {'url': img.original_url, 'type': img.image_type, 'filename': img.original_filename}
+                for img in local_images if img.original_url
+            ]
 
         return jsonify(resp_data)
     except Exception as e:

@@ -220,7 +220,11 @@
             </div>
             <div id="productInfo" class="hidden" style="margin-top:12px;color:#aaa;font-size:13px;"></div>
             <div id="processedImagesSection" class="hidden" style="margin-top:15px;">
-                <label style="color:#FF9800;font-size:14px;font-weight:600;">Bilder auswählen (für Kleinanzeigen Upload):</label>
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                    <label style="color:#FF9800;font-size:14px;font-weight:600;">Bilder auswählen:</label>
+                    <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;" id="btnProcessed" onclick="showImageSet('processed')">Bearbeitet</button>
+                    <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;" id="btnOriginals" onclick="showImageSet('originals')">Originale</button>
+                </div>
                 <div id="processedImages" class="images-row" style="margin-top:8px;"></div>
                 <div style="margin-top:6px;color:#888;font-size:12px;">Ausgewählte Bilder werden automatisch hochgeladen.</div>
             </div>
@@ -316,6 +320,27 @@
 
     <script>
         let selectedImageUrls = [];
+        let storedProcessedUrls = [];
+        let storedOriginalUrls = [];
+        let currentImageSet = 'processed';
+
+        function showImageSet(setName) {
+            currentImageSet = setName;
+            const urls = setName === 'originals' ? storedOriginalUrls : storedProcessedUrls;
+            const container = document.getElementById('processedImages');
+            container.innerHTML = urls.map((url, idx) => `
+                <label class="img-select selected">
+                    <input type="checkbox" checked onchange="toggleImage(this, '${url}')">
+                    <img src="${url}" alt="tire ${idx+1}">
+                </label>
+            `).join('');
+            selectedImageUrls = [...urls];
+            // Highlight active button
+            document.getElementById('btnProcessed').style.background = setName === 'processed' ? '#8BC34A' : '#444';
+            document.getElementById('btnProcessed').style.color = setName === 'processed' ? '#000' : '#fff';
+            document.getElementById('btnOriginals').style.background = setName === 'originals' ? '#8BC34A' : '#444';
+            document.getElementById('btnOriginals').style.color = setName === 'originals' ? '#000' : '#fff';
+        }
 
         function toggleImage(checkbox, url) {
             const wrapper = checkbox.closest('.img-select');
@@ -344,13 +369,12 @@
         }
 
         function buildTitle(f) {
-            // Format: 4x Sommerreifen 215/60 R17 96H Michelin Primacy 4 'inkl. Montage'
+            // Format: 4x Sommerreifen 215/60 R17 96H Michelin 'inkl. Montage'
             let parts = [f.quantity + 'x'];
             if (f.season) parts.push(f.season);
             if (f.size) parts.push(f.size);
             if (f.loadSpeed) parts.push(f.loadSpeed);
             if (f.brand) parts.push(f.brand);
-            if (f.model) parts.push(f.model);
             parts.push("'inkl. Montage'");
             return parts.join(' ');
         }
@@ -401,7 +425,13 @@
                 document.getElementById('model').value = td.model || '';
                 document.getElementById('size').value = td.size || '';
                 document.getElementById('treadDepth').value = td.tread_depth || '';
-                document.getElementById('dot').value = td.dot || '';
+                // Convert DOT to year: "07 / 18" → "2018", "10 / 19" → "2019"
+                let dotVal = td.dot || '';
+                const dotMatch = dotVal.match(/(\d{2})\s*\/?\s*(\d{2})/);
+                if (dotMatch) {
+                    dotVal = '20' + dotMatch[2];
+                }
+                document.getElementById('dot').value = dotVal;
                 document.getElementById('price').value = data.price ? Math.round(parseFloat(data.price)) : '';
 
                 // Build load/speed from metafields
@@ -426,24 +456,19 @@
                 document.getElementById('productInfo').textContent = `Shopify: ${data.title} — ${data.price} EUR`;
                 document.getElementById('productInfo').classList.remove('hidden');
 
-                // Show processed images with selection checkboxes
-                selectedImageUrls = [];
+                // Store both processed and original image URLs
                 const procImages = data.processed_images || [];
+                const origImages = data.original_images || [];
                 const shopifyImages = data.images || [];
-                const allImages = procImages.length > 0
-                    ? procImages.map(i => i.url)
-                    : shopifyImages;
+                storedProcessedUrls = procImages.length > 0 ? procImages.map(i => i.url) : shopifyImages;
+                storedOriginalUrls = origImages.length > 0 ? origImages.map(i => i.url) : [];
 
-                if (allImages.length > 0) {
-                    const container = document.getElementById('processedImages');
-                    container.innerHTML = allImages.map((url, idx) => `
-                        <label class="img-select selected">
-                            <input type="checkbox" checked onchange="toggleImage(this, '${url}')">
-                            <img src="${url}" alt="tire ${idx+1}">
-                        </label>
-                    `).join('');
-                    selectedImageUrls = [...allImages];
+                if (storedProcessedUrls.length > 0 || storedOriginalUrls.length > 0) {
                     document.getElementById('processedImagesSection').classList.remove('hidden');
+                    // Show processed by default
+                    showImageSet('processed');
+                    // Hide originals button if none available
+                    document.getElementById('btnOriginals').style.display = storedOriginalUrls.length > 0 ? '' : 'none';
                 }
 
                 document.getElementById('editCard').classList.remove('hidden');
