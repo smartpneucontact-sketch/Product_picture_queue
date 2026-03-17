@@ -220,12 +220,15 @@
             </div>
             <div id="productInfo" class="hidden" style="margin-top:12px;color:#aaa;font-size:13px;"></div>
             <div id="processedImagesSection" class="hidden" style="margin-top:15px;">
-                <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-                    <label style="color:#FF9800;font-size:14px;font-weight:600;">Bilder auswählen:</label>
-                    <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;" id="btnProcessed" onclick="showImageSet('processed')">Bearbeitet</button>
-                    <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;" id="btnOriginals" onclick="showImageSet('originals')">Originale</button>
+                <label style="color:#FF9800;font-size:14px;font-weight:600;margin-bottom:8px;display:block;">Bilder auswählen:</label>
+                <div id="processedImagesRow" class="hidden">
+                    <div style="color:#8BC34A;font-size:12px;font-weight:600;margin-bottom:4px;">Bearbeitet:</div>
+                    <div id="processedImages" class="images-row"></div>
                 </div>
-                <div id="processedImages" class="images-row" style="margin-top:8px;"></div>
+                <div id="originalImagesRow" class="hidden" style="margin-top:10px;">
+                    <div style="color:#FF9800;font-size:12px;font-weight:600;margin-bottom:4px;">Originale:</div>
+                    <div id="originalImages" class="images-row"></div>
+                </div>
                 <div style="margin-top:6px;color:#888;font-size:12px;">Ausgewählte Bilder werden automatisch hochgeladen.</div>
             </div>
         </div>
@@ -320,26 +323,34 @@
 
     <script>
         let selectedImageUrls = [];
-        let storedProcessedUrls = [];
-        let storedOriginalUrls = [];
-        let currentImageSet = 'processed';
 
-        function showImageSet(setName) {
-            currentImageSet = setName;
-            const urls = setName === 'originals' ? storedOriginalUrls : storedProcessedUrls;
-            const container = document.getElementById('processedImages');
-            container.innerHTML = urls.map((url, idx) => `
-                <label class="img-select selected">
-                    <input type="checkbox" checked onchange="toggleImage(this, '${url}')">
-                    <img src="${url}" alt="tire ${idx+1}">
-                </label>
-            `).join('');
-            selectedImageUrls = [...urls];
-            // Highlight active button
-            document.getElementById('btnProcessed').style.background = setName === 'processed' ? '#8BC34A' : '#444';
-            document.getElementById('btnProcessed').style.color = setName === 'processed' ? '#000' : '#fff';
-            document.getElementById('btnOriginals').style.background = setName === 'originals' ? '#8BC34A' : '#444';
-            document.getElementById('btnOriginals').style.color = setName === 'originals' ? '#000' : '#fff';
+        function renderImageRows(processedUrls, originalUrls) {
+            // Render processed images
+            const procContainer = document.getElementById('processedImages');
+            const procRow = document.getElementById('processedImagesRow');
+            if (processedUrls.length > 0) {
+                procContainer.innerHTML = processedUrls.map((url, idx) => `
+                    <label class="img-select selected">
+                        <input type="checkbox" checked onchange="toggleImage(this, '${url}')">
+                        <img src="${url}" alt="bearbeitet ${idx+1}">
+                    </label>
+                `).join('');
+                procRow.classList.remove('hidden');
+            }
+            // Render original images
+            const origContainer = document.getElementById('originalImages');
+            const origRow = document.getElementById('originalImagesRow');
+            if (originalUrls.length > 0) {
+                origContainer.innerHTML = originalUrls.map((url, idx) => `
+                    <label class="img-select">
+                        <input type="checkbox" onchange="toggleImage(this, '${url}')">
+                        <img src="${url}" alt="original ${idx+1}">
+                    </label>
+                `).join('');
+                origRow.classList.remove('hidden');
+            }
+            // Default: all processed selected, no originals selected
+            selectedImageUrls = [...processedUrls];
         }
 
         function toggleImage(checkbox, url) {
@@ -456,19 +467,16 @@
                 document.getElementById('productInfo').textContent = `Shopify: ${data.title} — ${data.price} EUR`;
                 document.getElementById('productInfo').classList.remove('hidden');
 
-                // Store both processed and original image URLs
+                // Show both processed and original images
                 const procImages = data.processed_images || [];
                 const origImages = data.original_images || [];
                 const shopifyImages = data.images || [];
-                storedProcessedUrls = procImages.length > 0 ? procImages.map(i => i.url) : shopifyImages;
-                storedOriginalUrls = origImages.length > 0 ? origImages.map(i => i.url) : [];
+                const processedUrls = procImages.length > 0 ? procImages.map(i => i.url) : shopifyImages;
+                const originalUrls = origImages.length > 0 ? origImages.map(i => i.url) : [];
 
-                if (storedProcessedUrls.length > 0 || storedOriginalUrls.length > 0) {
+                if (processedUrls.length > 0 || originalUrls.length > 0) {
                     document.getElementById('processedImagesSection').classList.remove('hidden');
-                    // Show processed by default
-                    showImageSet('processed');
-                    // Hide originals button if none available
-                    document.getElementById('btnOriginals').style.display = storedOriginalUrls.length > 0 ? '' : 'none';
+                    renderImageRows(processedUrls, originalUrls);
                 }
 
                 document.getElementById('editCard').classList.remove('hidden');
@@ -491,10 +499,9 @@
         }
 
         function collectSelectedImages() {
-            // Rebuild selectedImageUrls from currently checked checkboxes
-            // (browser may restore checkbox state after refresh but JS array resets)
+            // Rebuild selectedImageUrls from currently checked checkboxes in both rows
             selectedImageUrls = [];
-            document.querySelectorAll('#processedImages input[type="checkbox"]:checked').forEach(cb => {
+            document.querySelectorAll('#processedImages input[type="checkbox"]:checked, #originalImages input[type="checkbox"]:checked').forEach(cb => {
                 const img = cb.closest('.img-select')?.querySelector('img');
                 if (img && img.src) selectedImageUrls.push(img.src);
             });
