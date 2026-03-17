@@ -523,25 +523,26 @@
   var uploaded=0;
   if(imageUrls.length>0){
     console.log('Uploading '+imageUrls.length+' images...');
-    var fileInput=document.querySelector('input[type="file"][accept*="image"]');
-    if(!fileInput){console.error('File input not found');}
-    else{
-      for(var i=0;i<imageUrls.length;i++){
-        try{
-          console.log('Fetching image '+(i+1)+'/'+imageUrls.length);
-          var resp=await fetch(imageUrls[i]);
-          if(!resp.ok){console.error('HTTP '+resp.status+' for image '+(i+1));continue;}
-          var blob=await resp.blob();
-          var ext=blob.type.includes('png')?'.png':'.jpg';
-          var file=new File([blob],'tire_'+(i+1)+ext,{type:blob.type});
-          var dt=new DataTransfer();
-          dt.items.add(file);
-          fileInput.files=dt.files;
-          fileInput.dispatchEvent(new Event('change',{bubbles:true}));
-          uploaded++;
-          await new Promise(function(r){setTimeout(r,500);});
-        }catch(e){console.error('Failed image '+(i+1)+':',e);}
-      }
+    for(var i=0;i<imageUrls.length;i++){
+      try{
+        console.log('Fetching image '+(i+1)+'/'+imageUrls.length);
+        var resp=await fetch(imageUrls[i]);
+        if(!resp.ok){console.error('HTTP '+resp.status+' for image '+(i+1));continue;}
+        var blob=await resp.blob();
+        if(!blob.type.startsWith('image')){console.error('Not an image: '+blob.type);continue;}
+        var ext=blob.type.includes('png')?'.png':'.jpg';
+        var file=new File([blob],'tire_'+(i+1)+ext,{type:blob.type});
+        var dt=new DataTransfer();
+        dt.items.add(file);
+        /* Re-query file input each time - Plupload may recreate it after each upload */
+        var fileInput=document.querySelector('input[type="file"][accept*="image"]');
+        if(!fileInput){console.error('File input not found for image '+(i+1));continue;}
+        fileInput.files=dt.files;
+        fileInput.dispatchEvent(new Event('change',{bubbles:true}));
+        uploaded++;
+        console.log('Image '+(i+1)+' uploaded, waiting for Plupload...');
+        await new Promise(function(r){setTimeout(r,1500);});
+      }catch(e){console.error('Failed image '+(i+1)+':',e);}
     }
   }
   var msg='Formular ausgefüllt!';
