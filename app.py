@@ -311,14 +311,18 @@ def process_drafts():
 
 @app.route('/api/proxy-image')
 def proxy_image():
-    """Proxy an image URL to avoid CORS issues for canvas drawing."""
+    """Proxy an image URL to avoid CORS issues for canvas drawing and Kleinanzeigen upload."""
     import requests as req
     url = request.args.get('url')
     if not url:
         return 'Missing url', 400
     try:
         response = req.get(url, timeout=15)
-        return Response(response.content, mimetype=response.headers.get('Content-Type', 'image/jpeg'))
+        resp = Response(response.content, mimetype=response.headers.get('Content-Type', 'image/jpeg'))
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        resp.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return resp
     except Exception as e:
         return str(e), 500
 

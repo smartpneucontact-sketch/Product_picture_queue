@@ -501,32 +501,41 @@
     d.dispatchEvent(new Event('input',{bubbles:true}));
     d.dispatchEvent(new Event('change',{bubbles:true}));
   }
+  /* Versand: set to "Versand möglich" */
+  var versandSel=document.getElementById('autoteile_reifen.versand_s');
+  if(versandSel){versandSel.value='ja';versandSel.dispatchEvent(new Event('change',{bubbles:true}));}
   console.log('Text fields filled!');
 
-  /* === Upload images === */
+  /* === Upload images (one at a time for Plupload) === */
   var imageUrls=${imageUrlsJson};
+  var uploaded=0;
   if(imageUrls.length>0){
     console.log('Uploading '+imageUrls.length+' images...');
     var fileInput=document.querySelector('input[type="file"][accept*="image"]');
-    if(!fileInput){console.error('File input not found');alert('Formular ausgefüllt! Bilder-Upload nicht möglich.');return;}
-    var dt=new DataTransfer();
-    for(var i=0;i<imageUrls.length;i++){
-      try{
-        console.log('Fetching image '+(i+1)+'/'+imageUrls.length);
-        var resp=await fetch(imageUrls[i]);
-        var blob=await resp.blob();
-        var ext=blob.type.includes('png')?'.png':'.jpg';
-        var file=new File([blob],'tire_'+(i+1)+ext,{type:blob.type});
-        dt.items.add(file);
-      }catch(e){console.error('Failed to fetch image:',e);}
-    }
-    if(dt.files.length>0){
-      fileInput.files=dt.files;
-      fileInput.dispatchEvent(new Event('change',{bubbles:true}));
-      console.log(dt.files.length+' images uploaded!');
+    if(!fileInput){console.error('File input not found');}
+    else{
+      for(var i=0;i<imageUrls.length;i++){
+        try{
+          console.log('Fetching image '+(i+1)+'/'+imageUrls.length);
+          var resp=await fetch(imageUrls[i]);
+          if(!resp.ok){console.error('HTTP '+resp.status+' for image '+(i+1));continue;}
+          var blob=await resp.blob();
+          var ext=blob.type.includes('png')?'.png':'.jpg';
+          var file=new File([blob],'tire_'+(i+1)+ext,{type:blob.type});
+          var dt=new DataTransfer();
+          dt.items.add(file);
+          fileInput.files=dt.files;
+          fileInput.dispatchEvent(new Event('change',{bubbles:true}));
+          uploaded++;
+          await new Promise(function(r){setTimeout(r,500);});
+        }catch(e){console.error('Failed image '+(i+1)+':',e);}
+      }
     }
   }
-  alert('Formular ausgefüllt! '+(imageUrls.length>0?imageUrls.length+' Bilder hochgeladen.':'Bitte Bilder manuell hochladen.')+' Kategorie bitte manuell setzen.');
+  var msg='Formular ausgefüllt!';
+  if(uploaded>0)msg+=' '+uploaded+' Bilder hochgeladen.';
+  else if(imageUrls.length>0)msg+=' Bilder-Fetch fehlgeschlagen - bitte manuell hochladen.';
+  alert(msg);
 })();`;
 
             navigator.clipboard.writeText(script).then(() => {
