@@ -495,6 +495,48 @@
 
             const script = `(async function(){
   /* === Leboncoin Auto-Fill === */
+  function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
+  function waitFor(fn,timeout){
+    return new Promise(function(resolve,reject){
+      var start=Date.now();
+      var check=setInterval(function(){
+        var result=fn();
+        if(result){clearInterval(check);resolve(result);}
+        else if(Date.now()-start>timeout){clearInterval(check);reject(new Error('Timeout'));}
+      },500);
+    });
+  }
+  function clickByText(text){
+    var els=document.querySelectorAll('button,a,li,div[role="button"],span');
+    for(var i=0;i<els.length;i++){
+      if(els[i].textContent.trim()===text){els[i].click();return true;}
+    }
+    return false;
+  }
+
+  /* Step 1: Category selection if needed */
+  if(!document.getElementById('subject')){
+    console.log('Page categorie detectee, navigation auto...');
+    /* Click Vehicules */
+    var clicked=clickByText('Véhicules');
+    if(!clicked){console.error('Vehicules introuvable');alert('Erreur: impossible de trouver Vehicules');return;}
+    await wait(800);
+    /* Click Equipement auto */
+    clicked=clickByText('Équipement auto');
+    if(!clicked){console.error('Equipement auto introuvable');alert('Erreur: impossible de trouver Equipement auto');return;}
+    await wait(800);
+    /* Offre should be pre-selected, click Continuer */
+    clicked=clickByText('Continuer');
+    if(!clicked){console.error('Continuer introuvable');alert('Erreur: impossible de trouver Continuer');return;}
+    console.log('Categorie selectionnee, attente du formulaire...');
+    /* Wait for form to load */
+    try{
+      await waitFor(function(){return document.getElementById('subject');},10000);
+    }catch(e){alert('Formulaire non charge apres 10s');return;}
+    await wait(500);
+  }
+
+  /* Step 2: Fill form fields */
   function setVal(el,val){
     if(!el)return;
     var nativeSetter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
@@ -522,12 +564,11 @@
   setVal(document.getElementById('custom_ref'),'${sku}');
   console.log('Champs texte remplis!');
 
-  /* === Upload images === */
+  /* Step 3: Upload images */
   var imageUrls=${imageUrlsJson};
   var uploaded=0;
   if(imageUrls.length>0){
     console.log('Upload de '+imageUrls.length+' images...');
-    /* Try all-at-once first (Leboncoin supports multiple) */
     var dt=new DataTransfer();
     for(var i=0;i<imageUrls.length;i++){
       try{
