@@ -488,6 +488,7 @@
             const priceRaw = document.getElementById('previewPrice').value;
             const price = Math.round(parseFloat(priceRaw) || 0).toString();
             const desc = document.getElementById('previewDesc').value.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
+            const sku = document.getElementById('skuInput').value.trim().replace(/\\/g,'\\\\').replace(/'/g,"\\'");
             const proxyBase = '{{ request.url_root }}'.replace('http://', 'https://') + 'api/proxy-image?url=';
             const proxiedUrls = selectedImageUrls.map(u => proxyBase + encodeURIComponent(u));
             const imageUrlsJson = JSON.stringify(proxiedUrls);
@@ -517,6 +518,8 @@
   }
   /* Price */
   setVal(document.getElementById('price_cents'),'${price}');
+  /* Reference (SKU) */
+  setVal(document.getElementById('custom_ref'),'${sku}');
   console.log('Champs texte remplis!');
 
   /* === Upload images === */
@@ -524,6 +527,8 @@
   var uploaded=0;
   if(imageUrls.length>0){
     console.log('Upload de '+imageUrls.length+' images...');
+    /* Try all-at-once first (Leboncoin supports multiple) */
+    var dt=new DataTransfer();
     for(var i=0;i<imageUrls.length;i++){
       try{
         console.log('Telechargement image '+(i+1)+'/'+imageUrls.length);
@@ -533,16 +538,17 @@
         if(!blob.type.startsWith('image')){console.error('Pas une image: '+blob.type);continue;}
         var ext=blob.type.includes('png')?'.png':'.jpg';
         var file=new File([blob],'pneu_'+(i+1)+ext,{type:blob.type});
-        var dt=new DataTransfer();
         dt.items.add(file);
-        var fileInput=document.querySelector('input[type="file"][accept*="image"]');
-        if(!fileInput){console.error('Input fichier introuvable pour image '+(i+1));continue;}
+        uploaded++;
+      }catch(e){console.error('Echec image '+(i+1)+':',e);}
+    }
+    if(uploaded>0){
+      var fileInput=document.querySelector('input[type="file"][accept*="image"]');
+      if(fileInput){
         fileInput.files=dt.files;
         fileInput.dispatchEvent(new Event('change',{bubbles:true}));
-        uploaded++;
-        console.log('Image '+(i+1)+' uploadee, attente...');
-        await new Promise(function(r){setTimeout(r,1500);});
-      }catch(e){console.error('Echec image '+(i+1)+':',e);}
+        console.log(uploaded+' images ajoutees au file input');
+      }else{console.error('Input fichier introuvable');}
     }
   }
   var msg='Formulaire rempli!';
