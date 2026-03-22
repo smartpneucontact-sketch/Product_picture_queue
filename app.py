@@ -998,6 +998,12 @@ def kleinanzeigen():
     return render_template('kleinanzeigen.html')
 
 
+@app.route('/leboncoin')
+def leboncoin():
+    """Leboncoin auto-fill tool."""
+    return render_template('leboncoin.html')
+
+
 @app.route('/api/product-lookup', methods=['POST'])
 def product_lookup():
     """Look up full product data from Shopify by SKU for Kleinanzeigen listing."""

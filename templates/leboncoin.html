@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leboncoin Filler — SmartPneu Studio</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .header h1 { font-size: 26px; }
+        .header a {
+            color: #2196F3;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .subtitle { color: #888; font-size: 14px; margin-top: 4px; }
+
+        .card {
+            background: #252540;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            font-size: 17px;
+            margin-bottom: 15px;
+            color: #2196F3;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+        .form-row label {
+            min-width: 130px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        input, select, textarea {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid #333;
+            border-radius: 8px;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+        textarea { resize: vertical; min-height: 140px; }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-green { background: #8BC34A; color: #000; }
+        .btn-green:hover:not(:disabled) { background: #9CCC65; }
+        .btn-orange { background: #FF9800; color: #000; }
+        .btn-orange:hover:not(:disabled) { background: #FFB74D; }
+        .btn-blue { background: #2196F3; color: #fff; }
+        .btn-blue:hover:not(:disabled) { background: #42A5F5; }
+        .btn-secondary { background: #444; color: #fff; }
+        .btn-secondary:hover:not(:disabled) { background: #555; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+
+        .lookup-row {
+            display: flex;
+            gap: 10px;
+        }
+        .lookup-row input { flex: 1; font-size: 16px; padding: 12px 16px; }
+
+        .images-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        .images-row img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 2px solid #333;
+        }
+        .img-select {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+        .img-select input[type="checkbox"] {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: 18px;
+            height: 18px;
+            z-index: 2;
+            accent-color: #2196F3;
+            flex: none;
+        }
+        .img-select img {
+            transition: border-color 0.2s;
+        }
+        .img-select.selected img {
+            border-color: #2196F3;
+        }
+
+        .instructions {
+            background: #2d2d4a;
+            border: 2px dashed #2196F3;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+        .instructions p {
+            color: #ccc;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .instructions strong { color: #2196F3; }
+        kbd {
+            background: #444;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid #666;
+        }
+
+        .step {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #2196F3;
+            color: #fff;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 600;
+            z-index: 1000;
+            opacity: 1;
+            transition: opacity 0.3s;
+        }
+        .toast-success { background: #4CAF50; }
+        .toast-error { background: #f44336; }
+        .toast-info { background: #2196F3; }
+
+        .hidden { display: none; }
+
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>Leboncoin Filler</h1>
+                <p class="subtitle">Annonces pneus rapides</p>
+            </div>
+            <a href="/">← Retour au Studio</a>
+        </div>
+
+        <!-- Step 1: SKU Lookup -->
+        <div class="card">
+            <h2><span class="step">1</span> Entrer le SKU</h2>
+            <div class="lookup-row">
+                <input type="text" id="skuInput" placeholder="Entrer le SKU (ex. 1532)..."
+                       onkeydown="if(event.key==='Enter') lookupSKU()">
+                <button class="btn btn-green" onclick="lookupSKU()">Rechercher</button>
+            </div>
+            <div id="productInfo" class="hidden" style="margin-top:12px;color:#aaa;font-size:13px;"></div>
+            <div id="processedImagesSection" class="hidden" style="margin-top:15px;">
+                <label style="color:#2196F3;font-size:14px;font-weight:600;margin-bottom:8px;display:block;">Photos :</label>
+                <div id="processedImagesRow" class="hidden">
+                    <div style="color:#8BC34A;font-size:12px;font-weight:600;margin-bottom:4px;">Traitees :</div>
+                    <div id="processedImages" class="images-row"></div>
+                </div>
+                <div id="originalImagesRow" class="hidden" style="margin-top:10px;">
+                    <div style="color:#FF9800;font-size:12px;font-weight:600;margin-bottom:4px;">Originales :</div>
+                    <div id="originalImages" class="images-row"></div>
+                </div>
+                <div style="margin-top:6px;color:#888;font-size:12px;">Les photos cochees seront uploadees automatiquement.</div>
+            </div>
+        </div>
+
+        <!-- Step 2: Edit -->
+        <div class="card hidden" id="editCard">
+            <h2><span class="step">2</span> Modifier les donnees</h2>
+            <div class="two-col">
+                <div class="form-row">
+                    <label>Marque</label>
+                    <input type="text" id="brand" placeholder="Continental">
+                </div>
+                <div class="form-row">
+                    <label>Modele</label>
+                    <input type="text" id="model" placeholder="SportContact 5">
+                </div>
+                <div class="form-row">
+                    <label>Taille</label>
+                    <input type="text" id="size" placeholder="245/40 R19">
+                </div>
+                <div class="form-row">
+                    <label>Quantite</label>
+                    <input type="text" id="quantity" value="2">
+                </div>
+                <div class="form-row">
+                    <label>Charge/Vitesse</label>
+                    <input type="text" id="loadSpeed" placeholder="98Y">
+                </div>
+                <div class="form-row">
+                    <label>Profondeur (mm)</label>
+                    <input type="text" id="treadDepth" placeholder="6.80">
+                </div>
+                <div class="form-row">
+                    <label>DOT</label>
+                    <input type="text" id="dot" placeholder="2018">
+                </div>
+                <div class="form-row">
+                    <label>Saison</label>
+                    <select id="season">
+                        <option value="Pneus ete">Pneus ete</option>
+                        <option value="Pneus hiver">Pneus hiver</option>
+                        <option value="Pneus 4 saisons">Pneus 4 saisons</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row" style="margin-top:8px;">
+                <label>Prix (EUR)</label>
+                <input type="text" id="price" placeholder="89" style="max-width:150px;">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-green" onclick="generatePreview()">Apercu</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Preview & Copy -->
+        <div class="card hidden" id="previewCard">
+            <h2><span class="step">3</span> Apercu & Remplir</h2>
+
+            <div class="form-row">
+                <label>Titre</label>
+                <input type="text" id="previewTitle">
+            </div>
+            <div class="form-row">
+                <label>Prix (EUR)</label>
+                <input type="text" id="previewPrice" style="max-width:150px;">
+            </div>
+            <label style="color:#aaa;font-size:14px;">Description</label>
+            <textarea id="previewDesc" style="margin-top:6px;"></textarea>
+
+            <div class="btn-group">
+                <button class="btn btn-blue" onclick="copyFillScript()">
+                    📋 Copier le script Auto-Fill
+                </button>
+                <button class="btn btn-orange" onclick="openLeboncoin()">
+                    🔗 Ouvrir Leboncoin
+                </button>
+            </div>
+
+            <div class="instructions">
+                <p>
+                    <strong>1.</strong> Modifiez le titre/description ci-dessus si necessaire<br>
+                    <strong>2.</strong> Cliquez sur "Copier le script Auto-Fill"<br>
+                    <strong>3.</strong> Ouvrez Leboncoin (ou cliquez le bouton)<br>
+                    <strong>4.</strong> Appuyez sur <kbd>F12</kbd> → onglet Console<br>
+                    <strong>5.</strong> <kbd>Ctrl+V</kbd> coller → <kbd>Enter</kbd><br>
+                    <strong>6.</strong> Titre, prix, description et photos sont remplis !<br>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedImageUrls = [];
+
+        function renderImageRows(processedUrls, originalUrls) {
+            const procContainer = document.getElementById('processedImages');
+            const procRow = document.getElementById('processedImagesRow');
+            if (processedUrls.length > 0) {
+                procContainer.innerHTML = processedUrls.map((url, idx) => `
+                    <label class="img-select selected">
+                        <input type="checkbox" checked onchange="toggleImage(this, '${url}')">
+                        <img src="${url}" alt="traitee ${idx+1}">
+                    </label>
+                `).join('');
+                procRow.classList.remove('hidden');
+            }
+            const origContainer = document.getElementById('originalImages');
+            const origRow = document.getElementById('originalImagesRow');
+            if (originalUrls.length > 0) {
+                origContainer.innerHTML = originalUrls.map((url, idx) => `
+                    <label class="img-select">
+                        <input type="checkbox" onchange="toggleImage(this, '${url}')">
+                        <img src="${url}" alt="original ${idx+1}">
+                    </label>
+                `).join('');
+                origRow.classList.remove('hidden');
+            }
+            selectedImageUrls = [...processedUrls];
+        }
+
+        function toggleImage(checkbox, url) {
+            const wrapper = checkbox.closest('.img-select');
+            if (checkbox.checked) {
+                wrapper.classList.add('selected');
+                if (!selectedImageUrls.includes(url)) selectedImageUrls.push(url);
+            } else {
+                wrapper.classList.remove('selected');
+                selectedImageUrls = selectedImageUrls.filter(u => u !== url);
+            }
+        }
+
+        function getFields() {
+            return {
+                brand: document.getElementById('brand').value.trim(),
+                model: document.getElementById('model').value.trim(),
+                size: document.getElementById('size').value.trim(),
+                quantity: document.getElementById('quantity').value.trim() || '2',
+                loadSpeed: document.getElementById('loadSpeed').value.trim(),
+                treadDepth: document.getElementById('treadDepth').value.trim(),
+                dot: document.getElementById('dot').value.trim(),
+                season: document.getElementById('season').value,
+                price: document.getElementById('price').value.trim(),
+                sku: document.getElementById('skuInput').value.trim(),
+            };
+        }
+
+        function buildTitle(f) {
+            // Format: 4x Pneus ete 215/60 R17 96H Michelin montage inclus
+            let parts = [f.quantity + 'x'];
+            if (f.season) parts.push(f.season);
+            if (f.size) parts.push(f.size);
+            if (f.loadSpeed) parts.push(f.loadSpeed);
+            if (f.brand) parts.push(f.brand);
+            parts.push("montage inclus");
+            return parts.join(' ');
+        }
+
+        function buildDescription(f) {
+            let lines = [];
+            lines.push(`Bonjour, je vends ${f.quantity} ${f.season} de la marque ${f.brand} ${f.model} en taille ${f.size} ${f.loadSpeed}.`);
+            lines.push('');
+            lines.push('Le montage et l\'equilibrage sont inclus dans le prix.');
+            lines.push('');
+            lines.push(`La profondeur de sculpture des pneus est de ${f.treadDepth} mm.`);
+            lines.push('');
+            lines.push(`DOT des pneus : ${f.dot}.`);
+            lines.push('');
+            lines.push('Livraison possible dans toute la France \u{1F1EB}\u{1F1F7}.');
+            lines.push('');
+            lines.push('Je reponds tres rapidement, n\'hesitez pas a me contacter pour toute question.');
+            lines.push('');
+            if (f.sku) lines.push(`SKU: ${f.sku}`);
+            return lines.join('\n');
+        }
+
+        async function lookupSKU() {
+            const sku = document.getElementById('skuInput').value.trim();
+            if (!sku) return;
+
+            try {
+                showToast('Recherche SKU ' + sku + '...', 'info');
+                const resp = await fetch('/api/product-lookup', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({sku})
+                });
+                const data = await resp.json();
+
+                if (!data.success) {
+                    showToast(data.error || 'Non trouve', 'error');
+                    return;
+                }
+
+                const td = data.tire_data || {};
+                const title = data.title || '';
+
+                document.getElementById('brand').value = td.brand || '';
+                document.getElementById('model').value = td.model || '';
+                document.getElementById('size').value = td.size || '';
+                document.getElementById('treadDepth').value = td.tread_depth || '';
+                // Convert DOT to year
+                let dotVal = td.dot || '';
+                const dotMatch = dotVal.match(/(\d{2})\s*\/?\s*(\d{2})/);
+                if (dotMatch) {
+                    dotVal = '20' + dotMatch[2];
+                }
+                document.getElementById('dot').value = dotVal;
+                document.getElementById('price').value = data.price ? Math.round(parseFloat(data.price)) : '';
+
+                const loadSpeed = [td.load_index, td.speed_index].filter(Boolean).join('');
+                document.getElementById('loadSpeed').value = loadSpeed;
+
+                const qtyMatch = title.match(/^(\d)x\s*/);
+                document.getElementById('quantity').value = qtyMatch ? qtyMatch[1] : '2';
+
+                // Season from product_type (French)
+                const productType = (data.product_type || '').toLowerCase();
+                if (productType.includes('ete') || productType.includes('été')) {
+                    document.getElementById('season').value = 'Pneus ete';
+                } else if (productType.includes('hiver') || productType.includes('hier')) {
+                    document.getElementById('season').value = 'Pneus hiver';
+                } else if (productType.includes('4 saison') || productType.includes('saisons')) {
+                    document.getElementById('season').value = 'Pneus 4 saisons';
+                }
+
+                document.getElementById('productInfo').textContent = `Shopify: ${data.title} — ${data.price} EUR`;
+                document.getElementById('productInfo').classList.remove('hidden');
+
+                const procImages = data.processed_images || [];
+                const origImages = data.original_images || [];
+                const shopifyImages = data.images || [];
+                const processedUrls = procImages.length > 0 ? procImages.map(i => i.url) : shopifyImages;
+                const originalUrls = origImages.length > 0 ? origImages.map(i => i.url) : [];
+
+                if (processedUrls.length > 0 || originalUrls.length > 0) {
+                    document.getElementById('processedImagesSection').classList.remove('hidden');
+                    renderImageRows(processedUrls, originalUrls);
+                }
+
+                document.getElementById('editCard').classList.remove('hidden');
+                showToast('Produit trouve: ' + data.title, 'success');
+                generatePreview();
+
+            } catch (err) {
+                showToast('Erreur: ' + err.message, 'error');
+            }
+        }
+
+        function generatePreview() {
+            const f = getFields();
+            document.getElementById('previewTitle').value = buildTitle(f);
+            document.getElementById('previewPrice').value = Math.round(parseFloat(f.price) || 0);
+            document.getElementById('previewDesc').value = buildDescription(f);
+            document.getElementById('previewCard').classList.remove('hidden');
+        }
+
+        function collectSelectedImages() {
+            selectedImageUrls = [];
+            document.querySelectorAll('#processedImages input[type="checkbox"]:checked, #originalImages input[type="checkbox"]:checked').forEach(cb => {
+                const img = cb.closest('.img-select')?.querySelector('img');
+                if (img && img.src) selectedImageUrls.push(img.src);
+            });
+        }
+
+        function copyFillScript() {
+            collectSelectedImages();
+            const title = document.getElementById('previewTitle').value.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            const priceRaw = document.getElementById('previewPrice').value;
+            const price = Math.round(parseFloat(priceRaw) || 0).toString();
+            const desc = document.getElementById('previewDesc').value.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
+            const proxyBase = '{{ request.url_root }}'.replace('http://', 'https://') + 'api/proxy-image?url=';
+            const proxiedUrls = selectedImageUrls.map(u => proxyBase + encodeURIComponent(u));
+            const imageUrlsJson = JSON.stringify(proxiedUrls);
+
+            const script = `(async function(){
+  /* === Leboncoin Auto-Fill === */
+  function setVal(el,val){
+    if(!el)return;
+    var nativeSetter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+    if(!nativeSetter)nativeSetter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value');
+    if(nativeSetter&&nativeSetter.set)nativeSetter.set.call(el,val);
+    else el.value=val;
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+    el.dispatchEvent(new Event('blur',{bubbles:true}));
+  }
+  /* Title */
+  setVal(document.getElementById('subject'),'${title}');
+  /* Description */
+  var d=document.getElementById('body');
+  if(d){
+    var taSetter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value');
+    if(taSetter&&taSetter.set)taSetter.set.call(d,'${desc}');
+    else d.value='${desc}';
+    d.dispatchEvent(new Event('input',{bubbles:true}));
+    d.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  /* Price */
+  setVal(document.getElementById('price_cents'),'${price}');
+  console.log('Champs texte remplis!');
+
+  /* === Upload images === */
+  var imageUrls=${imageUrlsJson};
+  var uploaded=0;
+  if(imageUrls.length>0){
+    console.log('Upload de '+imageUrls.length+' images...');
+    for(var i=0;i<imageUrls.length;i++){
+      try{
+        console.log('Telechargement image '+(i+1)+'/'+imageUrls.length);
+        var resp=await fetch(imageUrls[i]);
+        if(!resp.ok){console.error('HTTP '+resp.status+' pour image '+(i+1));continue;}
+        var blob=await resp.blob();
+        if(!blob.type.startsWith('image')){console.error('Pas une image: '+blob.type);continue;}
+        var ext=blob.type.includes('png')?'.png':'.jpg';
+        var file=new File([blob],'pneu_'+(i+1)+ext,{type:blob.type});
+        var dt=new DataTransfer();
+        dt.items.add(file);
+        var fileInput=document.querySelector('input[type="file"][accept*="image"]');
+        if(!fileInput){console.error('Input fichier introuvable pour image '+(i+1));continue;}
+        fileInput.files=dt.files;
+        fileInput.dispatchEvent(new Event('change',{bubbles:true}));
+        uploaded++;
+        console.log('Image '+(i+1)+' uploadee, attente...');
+        await new Promise(function(r){setTimeout(r,1500);});
+      }catch(e){console.error('Echec image '+(i+1)+':',e);}
+    }
+  }
+  var msg='Formulaire rempli!';
+  if(uploaded>0)msg+=' '+uploaded+' photos uploadees.';
+  else if(imageUrls.length>0)msg+=' Echec upload photos - ajoutez-les manuellement.';
+  alert(msg);
+})();`;
+
+            navigator.clipboard.writeText(script).then(() => {
+                showToast('Script copie! Collez-le dans la console Leboncoin.', 'success');
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = script;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast('Script copie!', 'success');
+            });
+        }
+
+        function openLeboncoin() {
+            window.open('https://www.leboncoin.fr/deposer-une-annonce', '_blank');
+        }
+
+        function showToast(msg, type) {
+            const toast = document.createElement('div');
+            toast.className = 'toast toast-' + type;
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; }, 2500);
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+</html>
