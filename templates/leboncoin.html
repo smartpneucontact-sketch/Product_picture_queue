@@ -507,7 +507,13 @@
     });
   }
   function clickByText(text){
-    var els=document.querySelectorAll('button,a,li,div[role="button"],span');
+    /* Search all buttons first (Leboncoin category items are buttons) */
+    var btns=document.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){
+      if(btns[i].textContent.trim()===text){btns[i].click();return true;}
+    }
+    /* Then try links and other clickables */
+    var els=document.querySelectorAll('a,div[role="button"],span');
     for(var i=0;i<els.length;i++){
       if(els[i].textContent.trim()===text){els[i].click();return true;}
     }
@@ -520,7 +526,15 @@
     /* Click Vehicules */
     var clicked=clickByText('Véhicules');
     if(!clicked){console.error('Vehicules introuvable');alert('Erreur: impossible de trouver Vehicules');return;}
-    await wait(800);
+    /* Wait for subcategories to appear */
+    try{
+      await waitFor(function(){
+        var lis=document.querySelectorAll('li');
+        for(var i=0;i<lis.length;i++){if(lis[i].innerText?.trim()==='Équipement auto')return true;}
+        return false;
+      },5000);
+    }catch(e){alert('Sous-categories non chargees');return;}
+    await wait(300);
     /* Click Equipement auto */
     clicked=clickByText('Équipement auto');
     if(!clicked){console.error('Equipement auto introuvable');alert('Erreur: impossible de trouver Equipement auto');return;}
