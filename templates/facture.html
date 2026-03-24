@@ -403,7 +403,7 @@
                     <tbody>
                         <tr>
                             <td>
-                                <div class="product-name">${data.productName}</div>
+                                <div class="product-name">${data.productName} *</div>
                                 <div class="product-detail">${data.productDetail}${data.sku ? ' — SKU: ' + data.sku : ''}</div>
                             </td>
                             <td>${data.qty}</td>
@@ -412,6 +412,8 @@
                         </tr>
                     </tbody>
                 </table>
+
+                <p style="font-size:11px;color:#666;margin-top:-16px;margin-bottom:24px;">* Chaque produit pneu correspond a une paire, soit un lot de 2 pneumatiques.</p>
 
                 <div class="inv-totals">
                     <table>
