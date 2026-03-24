@@ -441,14 +441,15 @@
             const data = getInvoiceData();
             const filename = 'Facture_' + data.number.replace(/[^a-zA-Z0-9-]/g, '') + '.pdf';
 
-            // Create a hidden container with full invoice styling
-            const wrapper = document.createElement('div');
-            wrapper.style.cssText = 'position:fixed;top:0;left:0;width:210mm;background:#fff;z-index:-9999;';
-            const clone = document.getElementById('invoiceContent').cloneNode(true);
-            clone.style.cssText = 'background:#fff;color:#222;padding:30px 40px;font-size:13px;line-height:1.5;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;width:100%;';
-            // Copy table and layout styles into clone
-            const styleEl = document.createElement('style');
-            styleEl.textContent = `
+            // Use an off-screen iframe to guarantee 800px width rendering
+            const iframe = document.createElement('iframe');
+            iframe.style.cssText = 'position:absolute;left:-9999px;top:0;width:800px;height:1200px;border:none;';
+            document.body.appendChild(iframe);
+            const doc = iframe.contentDocument;
+            doc.open();
+            doc.write(`<!DOCTYPE html><html><head><style>
+                *{box-sizing:border-box;margin:0;padding:0}
+                body{background:#fff;color:#222;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;font-size:13px;line-height:1.5;padding:30px 40px;width:800px}
                 .inv-header{display:flex;justify-content:space-between;margin-bottom:30px;gap:20px}
                 .inv-company{flex:1}.inv-company p{color:#555;font-size:12px;line-height:1.6}
                 .inv-meta{text-align:right;flex-shrink:0}
@@ -458,7 +459,7 @@
                 .inv-client h3{font-size:11px;text-transform:uppercase;color:#888;margin-bottom:6px;letter-spacing:1px}
                 .inv-client p{font-size:13px;color:#333}
                 .inv-table{width:100%;border-collapse:collapse;margin-bottom:24px}
-                .inv-table th{background:#333;color:#fff;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase}
+                .inv-table th{background:#333;color:#fff;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px}
                 .inv-table th:last-child,.inv-table td:last-child{text-align:right}
                 .inv-table td{padding:12px;border-bottom:1px solid #eee;font-size:13px}
                 .product-name{font-weight:600}.product-detail{color:#666;font-size:12px}
@@ -467,24 +468,23 @@
                 .inv-totals td:last-child{text-align:right;font-weight:600}
                 .inv-totals .total-row td{font-size:16px;font-weight:700;border-top:2px solid #333;padding-top:10px;color:#D32F2F}
                 .inv-footer{border-top:1px solid #ddd;padding-top:16px;font-size:11px;color:#888;text-align:center;line-height:1.8}
-            `;
-            wrapper.appendChild(styleEl);
-            wrapper.appendChild(clone);
-            document.body.appendChild(wrapper);
+            </style></head><body>${document.getElementById('invoiceContent').innerHTML}</body></html>`);
+            doc.close();
 
             const opt = {
                 margin: [10, 10, 10, 10],
                 filename: filename,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                html2canvas: { scale: 2, useCORS: true, width: 800 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
 
-            html2pdf().set(opt).from(clone).save().then(function() {
-                document.body.removeChild(wrapper);
+            html2pdf().set(opt).from(doc.body).save().then(function() {
+                document.body.removeChild(iframe);
                 showToast('PDF exporte: ' + filename, 'success');
-            }).catch(function() {
-                document.body.removeChild(wrapper);
+            }).catch(function(e) {
+                console.error('PDF error:', e);
+                document.body.removeChild(iframe);
             });
         }
 
