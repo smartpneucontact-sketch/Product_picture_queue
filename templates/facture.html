@@ -244,7 +244,7 @@
                 <div class="edit-grid">
                     <div class="field-group">
                         <label>N° Facture</label>
-                        <input type="text" id="invoiceNumber" placeholder="F-2026-001">
+                        <input type="text" id="invoiceNumber" value="F-2026-001">
                     </div>
                     <div class="field-group">
                         <label>Date</label>
@@ -438,20 +438,34 @@
 
         function exportPDF() {
             refreshInvoice();
-            const el = document.getElementById('invoiceContent');
             const data = getInvoiceData();
             const filename = 'Facture_' + data.number.replace(/[^a-zA-Z0-9-]/g, '') + '.pdf';
 
+            // Create a clean clone for PDF rendering (avoids capturing page background/toolbar)
+            const clone = document.getElementById('invoiceContent').cloneNode(true);
+            clone.style.background = '#fff';
+            clone.style.color = '#222';
+            clone.style.width = '800px';
+            clone.style.padding = '30px 40px';
+            clone.style.fontSize = '13px';
+            clone.style.lineHeight = '1.5';
+            clone.style.fontFamily = '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+            document.body.appendChild(clone);
+
             const opt = {
-                margin: [10, 10, 10, 10],
+                margin: [5, 5, 5, 5],
                 filename: filename,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 900 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: ['avoid-all'] }
             };
 
-            html2pdf().set(opt).from(el).save().then(function() {
+            html2pdf().set(opt).from(clone).save().then(function() {
+                document.body.removeChild(clone);
                 showToast('PDF exporte: ' + filename, 'success');
+            }).catch(function() {
+                document.body.removeChild(clone);
             });
         }
 
@@ -464,7 +478,7 @@
 
         function resetInvoice() {
             document.getElementById('skuInput').value = '';
-            document.getElementById('invoiceNumber').value = '';
+            document.getElementById('invoiceNumber').value = 'F-2026-001';
             document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
             document.getElementById('clientName').value = '';
             document.getElementById('clientAddress').value = '';
