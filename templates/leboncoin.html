@@ -257,7 +257,7 @@
                 <div class="form-row">
                     <label>Saison</label>
                     <select id="season">
-                        <option value="Pneus ete">Pneus ete</option>
+                        <option value="Pneus été">Pneus été</option>
                         <option value="Pneus hiver">Pneus hiver</option>
                         <option value="Pneus 4 saisons">Pneus 4 saisons</option>
                     </select>
@@ -365,30 +365,33 @@
         }
 
         function buildTitle(f) {
-            // Format: 4x Pneus ete 215/60 R17 96H Michelin montage inclus
+            // Format: 2x Pneus été 235/40 R20 96Y Michelin + Montage
             let parts = [f.quantity + 'x'];
             if (f.season) parts.push(f.season);
             if (f.size) parts.push(f.size);
             if (f.loadSpeed) parts.push(f.loadSpeed);
             if (f.brand) parts.push(f.brand);
-            parts.push("montage inclus");
+            parts.push('+ Montage');
             return parts.join(' ');
+        }
+
+        function buildSizeVariants(size) {
+            // "235/40 R20" -> "235 40 20\n235/40/20"
+            const m = size.match(/(\d{3})\/(\d{2,3})\s*R?(\d{2})/i);
+            if (!m) return '';
+            return m[1] + ' ' + m[2] + ' ' + m[3] + '\n' + m[1] + '/' + m[2] + '/' + m[3];
         }
 
         function buildDescription(f) {
             let lines = [];
-            lines.push(`Bonjour, je vends ${f.quantity} ${f.season} de la marque ${f.brand} ${f.model} en taille ${f.size} ${f.loadSpeed}.`);
-            lines.push('');
-            lines.push('Le montage et l\'equilibrage sont inclus dans le prix.');
-            lines.push('');
+            lines.push(`Bonjour, nous proposons ${f.quantity} ${f.season} de la marque ${f.brand} ${f.model} de la taille ${f.size} ${f.loadSpeed}.`);
+            lines.push('Le montage et l\'\u00e9quilibrage sont inclus dans le prix.');
             lines.push(`La profondeur de sculpture des pneus est de ${f.treadDepth} mm.`);
-            lines.push('');
             lines.push(`DOT des pneus : ${f.dot}.`);
-            lines.push('');
             lines.push('Livraison possible dans toute la France \u{1F1EB}\u{1F1F7}.');
-            lines.push('');
-            lines.push('Je reponds tres rapidement, n\'hesitez pas a me contacter pour toute question.');
-            lines.push('');
+            lines.push('Nous sommes tr\u00e8s r\u00e9actives, n\'\u0068\u00e9sitez pas \u00e0 nous contacter pour toutes questions.');
+            const variants = buildSizeVariants(f.size);
+            if (variants) lines.push(variants);
             if (f.sku) lines.push(`SKU: ${f.sku}`);
             return lines.join('\n');
         }
@@ -436,7 +439,7 @@
                 // Season from product_type (French)
                 const productType = (data.product_type || '').toLowerCase();
                 if (productType.includes('ete') || productType.includes('été')) {
-                    document.getElementById('season').value = 'Pneus ete';
+                    document.getElementById('season').value = 'Pneus été';
                 } else if (productType.includes('hiver') || productType.includes('hier')) {
                     document.getElementById('season').value = 'Pneus hiver';
                 } else if (productType.includes('4 saison') || productType.includes('saisons')) {
@@ -577,6 +580,66 @@
   /* Reference (SKU) */
   setVal(document.getElementById('custom_ref'),'${sku}');
   console.log('Champs texte remplis!');
+
+  /* Step 2b: Fill dropdowns and extra fields by label */
+  function findFieldByLabel(labelText){
+    var labels=document.querySelectorAll('label,div,span');
+    for(var i=0;i<labels.length;i++){
+      if(labels[i].textContent.trim().toLowerCase().startsWith(labelText.toLowerCase())){
+        var parent=labels[i].closest('div[class]')||labels[i].parentElement;
+        var input=parent.querySelector('input[type="text"],input:not([type="hidden"]),select');
+        if(input)return input;
+        /* Try sibling or next element */
+        var next=labels[i].nextElementSibling;
+        if(next){
+          var inp=next.querySelector?next.querySelector('input,select'):null;
+          if(inp)return inp;
+        }
+      }
+    }
+    return null;
+  }
+  function clickDropdownOption(fieldLabel,optionText){
+    var field=findFieldByLabel(fieldLabel);
+    if(!field){console.log(fieldLabel+' field not found');return;}
+    /* Click to open dropdown */
+    field.click();field.focus();
+    setVal(field,optionText);
+    /* Try clicking matching option in listbox */
+    setTimeout(function(){
+      var opts=document.querySelectorAll('li[role="option"],div[role="option"],button[role="option"],li');
+      for(var i=0;i<opts.length;i++){
+        if(opts[i].textContent.trim().toLowerCase().includes(optionText.toLowerCase())){
+          opts[i].click();
+          console.log(fieldLabel+' -> '+optionText);
+          return;
+        }
+      }
+      console.log(fieldLabel+' option not found: '+optionText);
+    },300);
+  }
+  /* Type: Pneus et jantes */
+  clickDropdownOption('Type','Pneus et jantes');
+  await wait(600);
+  /* Duree de disponibilite */
+  clickDropdownOption('Dur','1 an');
+  await wait(600);
+  /* Poids du colis */
+  clickDropdownOption('Poids','De 30kg');
+  await wait(600);
+  /* Adresse */
+  var addrField=document.querySelector('input[name="location"],input[id="location"]')||findFieldByLabel('adresse')||findFieldByLabel('localisation');
+  if(addrField){
+    setVal(addrField,'7 Rue Peyerimhoff, Freyming-Merlebach');
+    console.log('Adresse remplie');
+  }
+  /* Telephone */
+  var phoneField=document.querySelector('input[type="tel"]')||findFieldByLabel('phone')||findFieldByLabel('tel');
+  if(phoneField){
+    setVal(phoneField,'778399510');
+    console.log('Telephone rempli');
+  }
+  await wait(300);
 
   /* Step 3: Upload images */
   var imageUrls=${imageUrlsJson};
