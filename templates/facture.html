@@ -441,31 +441,50 @@
             const data = getInvoiceData();
             const filename = 'Facture_' + data.number.replace(/[^a-zA-Z0-9-]/g, '') + '.pdf';
 
-            // Create a clean clone for PDF rendering (avoids capturing page background/toolbar)
+            // Create a hidden container with full invoice styling
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'position:fixed;top:0;left:0;width:210mm;background:#fff;z-index:-9999;';
             const clone = document.getElementById('invoiceContent').cloneNode(true);
-            clone.style.background = '#fff';
-            clone.style.color = '#222';
-            clone.style.width = '800px';
-            clone.style.padding = '30px 40px';
-            clone.style.fontSize = '13px';
-            clone.style.lineHeight = '1.5';
-            clone.style.fontFamily = '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
-            document.body.appendChild(clone);
+            clone.style.cssText = 'background:#fff;color:#222;padding:30px 40px;font-size:13px;line-height:1.5;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;width:100%;';
+            // Copy table and layout styles into clone
+            const styleEl = document.createElement('style');
+            styleEl.textContent = `
+                .inv-header{display:flex;justify-content:space-between;margin-bottom:30px;gap:20px}
+                .inv-company{flex:1}.inv-company p{color:#555;font-size:12px;line-height:1.6}
+                .inv-meta{text-align:right;flex-shrink:0}
+                .inv-meta h1{font-size:28px;color:#D32F2F;margin-bottom:8px;text-transform:uppercase;letter-spacing:2px}
+                .inv-meta p{font-size:12px;color:#555}.inv-meta strong{color:#222}
+                .inv-client{background:#f8f8f8;border-left:4px solid #D32F2F;padding:16px 20px;margin-bottom:30px}
+                .inv-client h3{font-size:11px;text-transform:uppercase;color:#888;margin-bottom:6px;letter-spacing:1px}
+                .inv-client p{font-size:13px;color:#333}
+                .inv-table{width:100%;border-collapse:collapse;margin-bottom:24px}
+                .inv-table th{background:#333;color:#fff;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase}
+                .inv-table th:last-child,.inv-table td:last-child{text-align:right}
+                .inv-table td{padding:12px;border-bottom:1px solid #eee;font-size:13px}
+                .product-name{font-weight:600}.product-detail{color:#666;font-size:12px}
+                .inv-totals{display:flex;justify-content:flex-end;margin-bottom:30px}
+                .inv-totals table{min-width:250px}.inv-totals td{padding:6px 12px;font-size:13px}
+                .inv-totals td:last-child{text-align:right;font-weight:600}
+                .inv-totals .total-row td{font-size:16px;font-weight:700;border-top:2px solid #333;padding-top:10px;color:#D32F2F}
+                .inv-footer{border-top:1px solid #ddd;padding-top:16px;font-size:11px;color:#888;text-align:center;line-height:1.8}
+            `;
+            wrapper.appendChild(styleEl);
+            wrapper.appendChild(clone);
+            document.body.appendChild(wrapper);
 
             const opt = {
-                margin: [5, 5, 5, 5],
+                margin: [10, 10, 10, 10],
                 filename: filename,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 900 },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak: { mode: ['avoid-all'] }
+                html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
 
             html2pdf().set(opt).from(clone).save().then(function() {
-                document.body.removeChild(clone);
+                document.body.removeChild(wrapper);
                 showToast('PDF exporte: ' + filename, 'success');
             }).catch(function() {
-                document.body.removeChild(clone);
+                document.body.removeChild(wrapper);
             });
         }
 
