@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Facture — SmartPneu Studio</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        /* === TOOLBAR (hidden in print) === */
+        .toolbar {
+            padding: 12px 16px;
+            background: #252540;
+            border-bottom: 1px solid #333;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .toolbar a { color: #4CAF50; text-decoration: none; font-size: 14px; margin-right: auto; }
+        .toolbar h1 { font-size: 18px; width: 100%; margin-bottom: 4px; }
+
+        .lookup-row {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+        .lookup-row input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid #333;
+            border-radius: 8px;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 16px;
+        }
+        .lookup-row input:focus { outline: none; border-color: #4CAF50; }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-green { background: #4CAF50; color: #fff; }
+        .btn-blue { background: #2196F3; color: #fff; }
+        .btn-orange { background: #FF9800; color: #000; }
+        .btn-red { background: #f44336; color: #fff; }
+        .btn-group { display: flex; gap: 8px; width: 100%; flex-wrap: wrap; }
+        .btn-group .btn { flex: 1; min-width: 100px; text-align: center; }
+
+        /* === EDITABLE FIELDS in toolbar === */
+        .edit-section {
+            width: 100%;
+            background: #1e1e38;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 4px;
+        }
+        .edit-section h3 { font-size: 14px; color: #4CAF50; margin-bottom: 8px; }
+        .edit-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .edit-grid.single { grid-template-columns: 1fr; }
+        .field-group { display: flex; flex-direction: column; gap: 2px; }
+        .field-group label { font-size: 11px; color: #888; text-transform: uppercase; }
+        .field-group input, .field-group textarea {
+            padding: 8px 10px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #252540;
+            color: #fff;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .field-group textarea { resize: vertical; min-height: 60px; }
+        .field-group input:focus, .field-group textarea:focus { outline: none; border-color: #4CAF50; }
+
+        /* === INVOICE PREVIEW === */
+        .invoice-wrapper {
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+        }
+        .invoice {
+            background: #fff;
+            color: #222;
+            width: 100%;
+            max-width: 800px;
+            padding: 40px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        /* Invoice header */
+        .inv-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            gap: 20px;
+        }
+        .inv-company { flex: 1; }
+        .inv-company h2 { font-size: 22px; color: #222; margin-bottom: 6px; font-weight: 700; }
+        .inv-company p { color: #555; font-size: 12px; line-height: 1.6; }
+        .inv-meta { text-align: right; flex-shrink: 0; }
+        .inv-meta h1 { font-size: 28px; color: #4CAF50; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 2px; }
+        .inv-meta p { font-size: 12px; color: #555; }
+        .inv-meta strong { color: #222; }
+
+        /* Client block */
+        .inv-client {
+            background: #f8f8f8;
+            border-left: 4px solid #4CAF50;
+            padding: 16px 20px;
+            margin-bottom: 30px;
+        }
+        .inv-client h3 { font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 6px; letter-spacing: 1px; }
+        .inv-client p { font-size: 13px; color: #333; }
+
+        /* Product table */
+        .inv-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+        .inv-table th {
+            background: #333;
+            color: #fff;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .inv-table th:last-child, .inv-table td:last-child { text-align: right; }
+        .inv-table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+        }
+        .inv-table .product-name { font-weight: 600; }
+        .inv-table .product-detail { color: #666; font-size: 12px; }
+
+        /* Totals */
+        .inv-totals {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 30px;
+        }
+        .inv-totals table { min-width: 250px; }
+        .inv-totals td { padding: 6px 12px; font-size: 13px; }
+        .inv-totals td:last-child { text-align: right; font-weight: 600; }
+        .inv-totals .total-row td {
+            font-size: 16px;
+            font-weight: 700;
+            border-top: 2px solid #333;
+            padding-top: 10px;
+            color: #4CAF50;
+        }
+
+        /* Footer */
+        .inv-footer {
+            border-top: 1px solid #ddd;
+            padding-top: 16px;
+            font-size: 11px;
+            color: #888;
+            text-align: center;
+            line-height: 1.8;
+        }
+
+        /* === MOBILE === */
+        @media (max-width: 640px) {
+            .invoice { padding: 20px 16px; font-size: 12px; }
+            .inv-header { flex-direction: column; gap: 12px; }
+            .inv-meta { text-align: left; }
+            .inv-meta h1 { font-size: 22px; }
+            .inv-company h2 { font-size: 18px; }
+            .inv-table th, .inv-table td { padding: 8px 6px; font-size: 11px; }
+            .edit-grid { grid-template-columns: 1fr; }
+        }
+
+        /* === PRINT === */
+        @media print {
+            body { background: #fff; }
+            .toolbar, .invoice-wrapper { display: none; }
+            .print-area {
+                display: block !important;
+                width: 100%;
+            }
+            .print-area .invoice {
+                max-width: none;
+                padding: 20px;
+                box-shadow: none;
+            }
+        }
+
+        .print-area { display: none; }
+        .hidden { display: none; }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 600;
+            z-index: 1000;
+            font-size: 14px;
+        }
+        .toast-success { background: #4CAF50; }
+        .toast-error { background: #f44336; }
+        .toast-info { background: #2196F3; }
+    </style>
+</head>
+<body>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar" id="toolbar">
+        <h1>Facture</h1>
+        <a href="/">← Retour au Studio</a>
+
+        <div class="lookup-row">
+            <input type="text" id="skuInput" placeholder="SKU (ex. 1534)..."
+                   onkeydown="if(event.key==='Enter') lookupSKU()">
+            <button class="btn btn-green" onclick="lookupSKU()">Rechercher</button>
+        </div>
+
+        <div id="editPanel" class="hidden" style="width:100%;">
+            <!-- Invoice meta -->
+            <div class="edit-section">
+                <h3>Facture</h3>
+                <div class="edit-grid">
+                    <div class="field-group">
+                        <label>N° Facture</label>
+                        <input type="text" id="invoiceNumber" placeholder="F-2026-001">
+                    </div>
+                    <div class="field-group">
+                        <label>Date</label>
+                        <input type="date" id="invoiceDate">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Client -->
+            <div class="edit-section" style="margin-top:8px;">
+                <h3>Client</h3>
+                <div class="edit-grid single">
+                    <div class="field-group">
+                        <label>Nom / Societe</label>
+                        <input type="text" id="clientName" placeholder="Nom du client">
+                    </div>
+                    <div class="field-group">
+                        <label>Adresse</label>
+                        <textarea id="clientAddress" placeholder="Adresse complete du client"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Product -->
+            <div class="edit-section" style="margin-top:8px;">
+                <h3>Produit</h3>
+                <div class="edit-grid">
+                    <div class="field-group">
+                        <label>Designation</label>
+                        <input type="text" id="productName" placeholder="4x Pneus ete 215/60R17">
+                    </div>
+                    <div class="field-group">
+                        <label>Detail</label>
+                        <input type="text" id="productDetail" placeholder="Michelin Primacy 4 - DOT 2021">
+                    </div>
+                    <div class="field-group">
+                        <label>Quantite</label>
+                        <input type="number" id="productQty" value="1" min="1">
+                    </div>
+                    <div class="field-group">
+                        <label>Prix unitaire HT (EUR)</label>
+                        <input type="text" id="productPriceHT" placeholder="74.17">
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group" style="margin-top:12px;">
+                <button class="btn btn-green" onclick="refreshInvoice()">Actualiser</button>
+                <button class="btn btn-blue" onclick="exportPDF()">PDF</button>
+                <button class="btn btn-orange" onclick="printInvoice()">Imprimer</button>
+                <button class="btn btn-red" onclick="resetInvoice()">Effacer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- INVOICE PREVIEW (screen) -->
+    <div class="invoice-wrapper" id="invoicePreview">
+        <div class="invoice" id="invoiceContent">
+            <div style="text-align:center;color:#aaa;padding:60px 0;">
+                Entrez un SKU ci-dessus pour generer la facture
+            </div>
+        </div>
+    </div>
+
+    <!-- INVOICE (print-only clone) -->
+    <div class="print-area" id="printArea"></div>
+
+    <script>
+        // Set today's date
+        document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+
+        function getInvoiceData() {
+            const priceHT = parseFloat(document.getElementById('productPriceHT').value) || 0;
+            const qty = parseInt(document.getElementById('productQty').value) || 1;
+            const totalHT = priceHT * qty;
+            const tva = totalHT * 0.20;
+            const totalTTC = totalHT + tva;
+
+            return {
+                number: document.getElementById('invoiceNumber').value || 'F-XXXX',
+                date: document.getElementById('invoiceDate').value,
+                clientName: document.getElementById('clientName').value || '',
+                clientAddress: document.getElementById('clientAddress').value || '',
+                productName: document.getElementById('productName').value || '',
+                productDetail: document.getElementById('productDetail').value || '',
+                qty: qty,
+                priceHT: priceHT,
+                totalHT: totalHT,
+                tva: tva,
+                totalTTC: totalTTC,
+                sku: document.getElementById('skuInput').value.trim()
+            };
+        }
+
+        function formatPrice(n) {
+            return n.toFixed(2).replace('.', ',') + ' \u20AC';
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+        function buildInvoiceHTML(data) {
+            const clientLines = data.clientAddress ? data.clientAddress.replace(/\n/g, '<br>') : '';
+            return `
+                <div class="inv-header">
+                    <div class="inv-company">
+                        <h2>smartpneu.com</h2>
+                        <p>
+                            1, rue Peyerimhoff<br>
+                            57800 France<br><br>
+                            SIRET : 992 392 357 00016<br>
+                            TVA : FR 24992392357
+                        </p>
+                    </div>
+                    <div class="inv-meta">
+                        <h1>Facture</h1>
+                        <p><strong>${data.number}</strong></p>
+                        <p>Date : ${formatDate(data.date)}</p>
+                        <p>Paiement : A reception</p>
+                    </div>
+                </div>
+
+                <div class="inv-client">
+                    <h3>Facturer a</h3>
+                    <p><strong>${data.clientName || '—'}</strong></p>
+                    <p>${clientLines || '—'}</p>
+                </div>
+
+                <table class="inv-table">
+                    <thead>
+                        <tr>
+                            <th>Designation</th>
+                            <th>Qte</th>
+                            <th>Prix unit. HT</th>
+                            <th>Total HT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <div class="product-name">${data.productName}</div>
+                                <div class="product-detail">${data.productDetail}${data.sku ? ' — SKU: ' + data.sku : ''}</div>
+                            </td>
+                            <td>${data.qty}</td>
+                            <td style="text-align:right">${formatPrice(data.priceHT)}</td>
+                            <td style="text-align:right">${formatPrice(data.totalHT)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="inv-totals">
+                    <table>
+                        <tr><td>Total HT</td><td>${formatPrice(data.totalHT)}</td></tr>
+                        <tr><td>TVA (20%)</td><td>${formatPrice(data.tva)}</td></tr>
+                        <tr class="total-row"><td>Total TTC</td><td>${formatPrice(data.totalTTC)}</td></tr>
+                    </table>
+                </div>
+
+                <div class="inv-footer">
+                    smartpneu.com — 1, rue Peyerimhoff, 57800 France<br>
+                    SIRET : 992 392 357 00016 — TVA : FR 24992392357<br>
+                    Conditions de paiement : A reception
+                </div>
+            `;
+        }
+
+        function refreshInvoice() {
+            const data = getInvoiceData();
+            document.getElementById('invoiceContent').innerHTML = buildInvoiceHTML(data);
+        }
+
+        function exportPDF() {
+            refreshInvoice();
+            const el = document.getElementById('invoiceContent');
+            const data = getInvoiceData();
+            const filename = 'Facture_' + data.number.replace(/[^a-zA-Z0-9-]/g, '') + '.pdf';
+
+            const opt = {
+                margin: [10, 10, 10, 10],
+                filename: filename,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(el).save().then(function() {
+                showToast('PDF exporte: ' + filename, 'success');
+            });
+        }
+
+        function printInvoice() {
+            refreshInvoice();
+            const html = document.getElementById('invoiceContent').innerHTML;
+            document.getElementById('printArea').innerHTML = '<div class="invoice">' + html + '</div>';
+            window.print();
+        }
+
+        function resetInvoice() {
+            document.getElementById('skuInput').value = '';
+            document.getElementById('invoiceNumber').value = '';
+            document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('clientName').value = '';
+            document.getElementById('clientAddress').value = '';
+            document.getElementById('productName').value = '';
+            document.getElementById('productDetail').value = '';
+            document.getElementById('productQty').value = '1';
+            document.getElementById('productPriceHT').value = '';
+            document.getElementById('editPanel').classList.add('hidden');
+            document.getElementById('invoiceContent').innerHTML = '<div style="text-align:center;color:#aaa;padding:60px 0;">Entrez un SKU ci-dessus pour generer la facture</div>';
+        }
+
+        async function lookupSKU() {
+            const sku = document.getElementById('skuInput').value.trim();
+            if (!sku) return;
+
+            try {
+                showToast('Recherche SKU ' + sku + '...', 'info');
+                const resp = await fetch('/api/product-lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sku })
+                });
+                const data = await resp.json();
+
+                if (!data.success) {
+                    showToast(data.error || 'Non trouve', 'error');
+                    return;
+                }
+
+                const td = data.tire_data || {};
+                const title = data.title || '';
+                const price = parseFloat(data.price) || 0;
+
+                // Calculate HT from TTC (price is TTC, TVA 20%)
+                const priceHT = price / 1.20;
+
+                // Extract quantity from title
+                const qtyMatch = title.match(/^(\d)x\s*/);
+                const qty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+
+                // Build product name
+                const season = (data.product_type || '').toLowerCase();
+                let seasonFR = 'Pneus';
+                if (season.includes('ete') || season.includes('été')) seasonFR = 'Pneus ete';
+                else if (season.includes('hiver')) seasonFR = 'Pneus hiver';
+                else if (season.includes('saison')) seasonFR = 'Pneus 4 saisons';
+
+                const loadSpeed = [td.load_index, td.speed_index].filter(Boolean).join('');
+                const productName = [qty + 'x', seasonFR, td.size, loadSpeed, td.brand].filter(Boolean).join(' ');
+
+                // DOT conversion
+                let dotVal = td.dot || '';
+                const dotMatch = dotVal.match(/(\d{2})\s*\/?\s*(\d{2})/);
+                if (dotMatch) dotVal = '20' + dotMatch[2];
+
+                const productDetail = [td.brand, td.model, dotVal ? 'DOT ' + dotVal : ''].filter(Boolean).join(' — ');
+
+                // Fill fields
+                document.getElementById('productName').value = productName + ' montage inclus';
+                document.getElementById('productDetail').value = productDetail;
+                document.getElementById('productQty').value = '1'; // 1 lot
+                document.getElementById('productPriceHT').value = priceHT.toFixed(2);
+
+                // Show edit panel and refresh
+                document.getElementById('editPanel').classList.remove('hidden');
+                refreshInvoice();
+                showToast('Produit charge: ' + title, 'success');
+
+            } catch (err) {
+                showToast('Erreur: ' + err.message, 'error');
+            }
+        }
+
+        function showToast(msg, type) {
+            const toast = document.createElement('div');
+            toast.className = 'toast toast-' + type;
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; }, 2500);
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+</html>

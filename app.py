@@ -1004,6 +1004,12 @@ def leboncoin():
     return render_template('leboncoin.html')
 
 
+@app.route('/facture')
+def facture():
+    """Invoice generator tool."""
+    return render_template('facture.html')
+
+
 @app.route('/api/product-lookup', methods=['POST'])
 def product_lookup():
     """Look up full product data from Shopify by SKU for Kleinanzeigen listing."""
