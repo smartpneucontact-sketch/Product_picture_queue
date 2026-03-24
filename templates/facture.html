@@ -24,7 +24,7 @@
             gap: 8px;
             align-items: center;
         }
-        .toolbar a { color: #4CAF50; text-decoration: none; font-size: 14px; margin-right: auto; }
+        .toolbar a { color: #D32F2F; text-decoration: none; font-size: 14px; margin-right: auto; }
         .toolbar h1 { font-size: 18px; width: 100%; margin-bottom: 4px; }
 
         .lookup-row {
@@ -41,7 +41,7 @@
             color: #fff;
             font-size: 16px;
         }
-        .lookup-row input:focus { outline: none; border-color: #4CAF50; }
+        .lookup-row input:focus { outline: none; border-color: #D32F2F; }
 
         .btn {
             padding: 10px 16px;
@@ -54,7 +54,7 @@
             white-space: nowrap;
         }
         .btn:active { transform: scale(0.97); }
-        .btn-green { background: #4CAF50; color: #fff; }
+        .btn-green { background: #D32F2F; color: #fff; }
         .btn-blue { background: #2196F3; color: #fff; }
         .btn-orange { background: #FF9800; color: #000; }
         .btn-red { background: #f44336; color: #fff; }
@@ -69,7 +69,7 @@
             padding: 12px;
             margin-top: 4px;
         }
-        .edit-section h3 { font-size: 14px; color: #4CAF50; margin-bottom: 8px; }
+        .edit-section h3 { font-size: 14px; color: #D32F2F; margin-bottom: 8px; }
         .edit-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -88,7 +88,7 @@
             font-family: inherit;
         }
         .field-group textarea { resize: vertical; min-height: 60px; }
-        .field-group input:focus, .field-group textarea:focus { outline: none; border-color: #4CAF50; }
+        .field-group input:focus, .field-group textarea:focus { outline: none; border-color: #D32F2F; }
 
         /* === INVOICE PREVIEW === */
         .invoice-wrapper {
@@ -117,14 +117,14 @@
         .inv-company h2 { font-size: 22px; color: #222; margin-bottom: 6px; font-weight: 700; }
         .inv-company p { color: #555; font-size: 12px; line-height: 1.6; }
         .inv-meta { text-align: right; flex-shrink: 0; }
-        .inv-meta h1 { font-size: 28px; color: #4CAF50; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 2px; }
+        .inv-meta h1 { font-size: 28px; color: #D32F2F; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 2px; }
         .inv-meta p { font-size: 12px; color: #555; }
         .inv-meta strong { color: #222; }
 
         /* Client block */
         .inv-client {
             background: #f8f8f8;
-            border-left: 4px solid #4CAF50;
+            border-left: 4px solid #D32F2F;
             padding: 16px 20px;
             margin-bottom: 30px;
         }
@@ -165,7 +165,7 @@
             font-weight: 700;
             border-top: 2px solid #333;
             padding-top: 10px;
-            color: #4CAF50;
+            color: #D32F2F;
         }
 
         /* Footer */
@@ -219,7 +219,7 @@
             z-index: 1000;
             font-size: 14px;
         }
-        .toast-success { background: #4CAF50; }
+        .toast-success { background: #D32F2F; }
         .toast-error { background: #f44336; }
         .toast-info { background: #2196F3; }
     </style>
@@ -367,7 +367,9 @@
             return `
                 <div class="inv-header">
                     <div class="inv-company">
-                        <h2>smartpneu.com</h2>
+                        <div class="inv-logo" style="margin-bottom:8px;">
+                            <span style="font-size:28px;font-weight:800;letter-spacing:-0.5px;"><span style="color:#D32F2F;">smart</span><span style="color:#222;">pneu</span></span><span style="font-size:14px;color:#666;">.com</span>
+                        </div>
                         <p>
                             1, rue Peyerimhoff<br>
                             57800 France<br><br>
@@ -420,7 +422,7 @@
                 </div>
 
                 <div class="inv-footer">
-                    smartpneu.com — 1, rue Peyerimhoff, 57800 France<br>
+                    <span style="font-weight:700;"><span style="color:#D32F2F;">smart</span>pneu</span>.com — 1, rue Peyerimhoff, 57800 France<br>
                     SIRET : 992 392 357 00016 — TVA : FR 24992392357<br>
                     Conditions de paiement : A reception
                 </div>
