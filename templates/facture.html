@@ -523,11 +523,8 @@
                 // Build product name: Pneu size brand model load_index speed_index
                 const productName = ['Pneu', td.size, td.brand, td.model, td.load_index, td.speed_index].filter(Boolean).join(' ');
 
-                // DOT conversion
-                let dotVal = td.dot || '';
-                const dotMatch = dotVal.match(/(\d{2})\s*\/?\s*(\d{2})/);
-                if (dotMatch) dotVal = '20' + dotMatch[2];
-
+                // Keep raw DOT format (e.g. "07 / 23")
+                const dotVal = td.dot || '';
                 const productDetail = dotVal ? 'DOT ' + dotVal : '';
 
                 // Fill fields
