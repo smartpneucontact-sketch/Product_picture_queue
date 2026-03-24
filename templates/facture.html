@@ -285,8 +285,12 @@
                         <input type="number" id="productQty" value="1" min="1">
                     </div>
                     <div class="field-group">
-                        <label>Prix unitaire HT (EUR)</label>
-                        <input type="text" id="productPriceHT" placeholder="74.17">
+                        <label>Prix TTC (EUR)</label>
+                        <input type="text" id="productPriceTTC" placeholder="89.00" oninput="syncFromTTC()">
+                    </div>
+                    <div class="field-group">
+                        <label>Prix HT (EUR)</label>
+                        <input type="text" id="productPriceHT" placeholder="74.17" oninput="syncFromHT()">
                     </div>
                 </div>
             </div>
@@ -315,6 +319,15 @@
     <script>
         // Set today's date
         document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+
+        function syncFromTTC() {
+            const ttc = parseFloat(document.getElementById('productPriceTTC').value) || 0;
+            document.getElementById('productPriceHT').value = (ttc / 1.20).toFixed(2);
+        }
+        function syncFromHT() {
+            const ht = parseFloat(document.getElementById('productPriceHT').value) || 0;
+            document.getElementById('productPriceTTC').value = (ht * 1.20).toFixed(2);
+        }
 
         function getInvoiceData() {
             const priceHT = parseFloat(document.getElementById('productPriceHT').value) || 0;
@@ -454,6 +467,7 @@
             document.getElementById('productName').value = '';
             document.getElementById('productDetail').value = '';
             document.getElementById('productQty').value = '1';
+            document.getElementById('productPriceTTC').value = '';
             document.getElementById('productPriceHT').value = '';
             document.getElementById('editPanel').classList.add('hidden');
             document.getElementById('invoiceContent').innerHTML = '<div style="text-align:center;color:#aaa;padding:60px 0;">Entrez un SKU ci-dessus pour generer la facture</div>';
@@ -488,27 +502,21 @@
                 const qtyMatch = title.match(/^(\d)x\s*/);
                 const qty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
 
-                // Build product name
-                const season = (data.product_type || '').toLowerCase();
-                let seasonFR = 'Pneus';
-                if (season.includes('ete') || season.includes('été')) seasonFR = 'Pneus ete';
-                else if (season.includes('hiver')) seasonFR = 'Pneus hiver';
-                else if (season.includes('saison')) seasonFR = 'Pneus 4 saisons';
-
-                const loadSpeed = [td.load_index, td.speed_index].filter(Boolean).join('');
-                const productName = [qty + 'x', seasonFR, td.size, loadSpeed, td.brand].filter(Boolean).join(' ');
+                // Build product name: Pneu size brand model load_index speed_index
+                const productName = ['Pneu', td.size, td.brand, td.model, td.load_index, td.speed_index].filter(Boolean).join(' ');
 
                 // DOT conversion
                 let dotVal = td.dot || '';
                 const dotMatch = dotVal.match(/(\d{2})\s*\/?\s*(\d{2})/);
                 if (dotMatch) dotVal = '20' + dotMatch[2];
 
-                const productDetail = [td.brand, td.model, dotVal ? 'DOT ' + dotVal : ''].filter(Boolean).join(' — ');
+                const productDetail = dotVal ? 'DOT ' + dotVal : '';
 
                 // Fill fields
-                document.getElementById('productName').value = productName + ' montage inclus';
+                document.getElementById('productName').value = productName;
                 document.getElementById('productDetail').value = productDetail;
-                document.getElementById('productQty').value = '1'; // 1 lot
+                document.getElementById('productQty').value = qty.toString();
+                document.getElementById('productPriceTTC').value = price.toFixed(2);
                 document.getElementById('productPriceHT').value = priceHT.toFixed(2);
 
                 // Show edit panel and refresh
