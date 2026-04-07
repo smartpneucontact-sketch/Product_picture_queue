@@ -532,31 +532,16 @@
     el.dispatchEvent(new Event('change',{bubbles:true}));
     el.dispatchEvent(new Event('blur',{bubbles:true}));
   }
-  setVal(document.getElementById('postad-title'),'${title}');
-  /* Price: set both legacy and React micro-frontend inputs */
-  setVal(document.getElementById('pstad-price'),'${price}');
-  var mfPrice=document.getElementById('micro-frontend-price');
-  if(mfPrice) setVal(mfPrice,'${price}');
-  var d=document.getElementById('pstad-descrptn');
+  setVal(document.getElementById('ad-title'),'${title}');
+  setVal(document.getElementById('ad-price-amount'),'${price}');
+  setVal(document.getElementById('ad-name'),'smartpneu.com');
+  var d=document.getElementById('ad-description');
   if(d){
     var taSetter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value');
     if(taSetter&&taSetter.set)taSetter.set.call(d,'${desc}');
     else d.value='${desc}';
     d.dispatchEvent(new Event('input',{bubbles:true}));
     d.dispatchEvent(new Event('change',{bubbles:true}));
-  }
-  /* Versand: set to "Versand möglich" (retry — dropdown appears after category is selected) */
-  function trySetVersand(){
-    var v=document.getElementById('autoteile_reifen.versand_s');
-    if(v){v.value='ja';v.dispatchEvent(new Event('change',{bubbles:true}));console.log('Versand set!');return true;}
-    return false;
-  }
-  if(!trySetVersand()){
-    var versandAttempts=0;
-    var versandTimer=setInterval(function(){
-      versandAttempts++;
-      if(trySetVersand()||versandAttempts>20){clearInterval(versandTimer);}
-    },1000);
   }
   console.log('Text fields filled!');
 
