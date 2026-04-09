@@ -566,47 +566,24 @@
   }
 
   /* === Select dropdowns: Art & Versand === */
-  function findAndClickDropdown(labelText, optionText){
-    /* Find the label, then the associated select/button/dropdown nearby */
-    var labels=document.querySelectorAll('label,legend,span,div');
-    for(var i=0;i<labels.length;i++){
-      if(labels[i].textContent.trim().indexOf(labelText)===0){
-        var parent=labels[i].closest('[class]')?.parentElement||labels[i].parentElement;
-        /* Try native select first */
-        var sel=parent.querySelector('select');
-        if(sel){
-          for(var j=0;j<sel.options.length;j++){
-            if(sel.options[j].text.indexOf(optionText)>=0){
-              sel.value=sel.options[j].value;
-              sel.dispatchEvent(new Event('change',{bubbles:true}));
-              console.log(labelText+' set to '+optionText+' (select)');
-              return true;
-            }
-          }
-        }
-        /* Try button/combobox dropdown */
-        var btn=parent.querySelector('button,[role="combobox"],[role="listbox"]');
-        if(btn){btn.click();
-          setTimeout(function(){
-            var opts=document.querySelectorAll('[role="option"],li[class*="option"],ul li button');
-            for(var k=0;k<opts.length;k++){
-              if(opts[k].textContent.trim().indexOf(optionText)>=0){
-                opts[k].click();
-                console.log(labelText+' set to '+optionText+' (dropdown)');
-                return;
-              }
-            }
-            console.warn(labelText+': option "'+optionText+'" not found in dropdown');
-          },500);
-          return true;
+  function clickDropdown(btnId, optionText){
+    var btn=document.getElementById(btnId);
+    if(!btn){console.warn(btnId+' not found');return;}
+    btn.click();
+    setTimeout(function(){
+      var opts=document.querySelectorAll('[role="option"],li button,ul li');
+      for(var k=0;k<opts.length;k++){
+        if(opts[k].textContent.trim().indexOf(optionText)>=0){
+          opts[k].click();
+          console.log(btnId+' -> '+optionText);
+          return;
         }
       }
-    }
-    console.warn(labelText+' field not found');
-    return false;
+      console.warn(btnId+': "'+optionText+'" not found');
+    },500);
   }
-  findAndClickDropdown('Art','Reifen & Felgen');
-  setTimeout(function(){findAndClickDropdown('Versand','Versand möglich');},1000);
+  clickDropdown('autoteile_reifen.art','Reifen & Felgen');
+  setTimeout(function(){clickDropdown('autoteile_reifen.versand','Versand möglich');},1200);
   console.log('Text fields filled!');
 
   /* === Upload images (one at a time for Plupload) === */
