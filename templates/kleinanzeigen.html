@@ -380,31 +380,52 @@
         }
 
         function buildTitle(f) {
-            // Format: 4x Sommerreifen 215/60 R17 96H Michelin 'inkl. Montage'
+            // Format: 2x Kumho Ecowing ES31 Sommerreifen – 165/60 R14 75H – Profiltiefe 8,01 mm
             let parts = [f.quantity + 'x'];
+            if (f.brand) parts.push(f.brand);
+            if (f.model) parts.push(f.model);
             if (f.season) parts.push(f.season);
+            parts.push('–');
             if (f.size) parts.push(f.size);
             if (f.loadSpeed) parts.push(f.loadSpeed);
-            if (f.brand) parts.push(f.brand);
-            parts.push("inkl. Montage");
+            parts.push('–');
+            if (f.treadDepth) parts.push('Profiltiefe ' + f.treadDepth.replace('.', ',') + ' mm');
             return parts.join(' ');
         }
 
         function buildDescription(f) {
+            const qty = parseInt(f.quantity) || 2;
+            const treadComma = f.treadDepth ? f.treadDepth.replace('.', ',') : '';
             let lines = [];
-            lines.push(`Hallo, ich verkaufe ${f.quantity} ${f.season} der Marke ${f.brand} ${f.model} in der Größe ${f.size} ${f.loadSpeed}.`);
+
+            // Header line
+            lines.push(`${qty}x ${f.brand} ${f.model} ${f.season} – ${f.size} ${f.loadSpeed} – Profiltiefe ${treadComma} mm`);
             lines.push('');
+
+            // Main text
+            lines.push(`Ich verkaufe ${qty} ${f.season} der Marke ${f.brand} ${f.model} in der Größe ${f.size} ${f.loadSpeed}.`);
+            lines.push('');
+
+            // Extra line for qty 4
+            if (qty === 4) {
+                lines.push('Auf Wunsch kann auch ein Paar (2 Reifen) zum halben Preis verkauft werden.');
+                lines.push('');
+            }
+
             lines.push('Montage und Auswuchten sind im Preis inbegriffen.');
+
+            // Details block
+            lines.push('Details:');
+            lines.push(`-Marke: ${f.brand} ${f.model} `);
+            lines.push(`-Größe: ${f.size} ${f.loadSpeed} `);
+            lines.push(`-Anzahl: ${qty} Reifen `);
+            lines.push(`-Profiltiefe: ${treadComma} mm `);
+            lines.push(`-DOT: ${f.dot} `);
             lines.push('');
-            lines.push(`Die Profiltiefe der Reifen beträgt ${f.treadDepth} mm.`);
-            lines.push('');
-            lines.push(`DOT der Reifen sind ${f.dot}.`);
-            lines.push('');
-            lines.push('Versand in ganz Deutschland möglich \u{1F1E9}\u{1F1EA}.');
-            lines.push('');
-            lines.push('Ich antworte sehr schnell, daher können Sie mich bei Fragen gerne jederzeit kontaktieren.');
-            lines.push('');
-            if (f.sku) lines.push(`SKU: ${f.sku}`);
+
+            lines.push('Versand: in ganz Deutschland möglich \u{1F1E9}\u{1F1EA}.');
+            lines.push('Ich antworte sehr schnell. Bei Fragen können Sie mich jederzeit gerne kontaktieren.');
+            if (f.sku) lines.push('SKU: ' + f.sku);
             return lines.join('\n');
         }
 
@@ -543,6 +564,49 @@
     d.dispatchEvent(new Event('input',{bubbles:true}));
     d.dispatchEvent(new Event('change',{bubbles:true}));
   }
+
+  /* === Select dropdowns: Art & Versand === */
+  function findAndClickDropdown(labelText, optionText){
+    /* Find the label, then the associated select/button/dropdown nearby */
+    var labels=document.querySelectorAll('label,legend,span,div');
+    for(var i=0;i<labels.length;i++){
+      if(labels[i].textContent.trim().indexOf(labelText)===0){
+        var parent=labels[i].closest('[class]')?.parentElement||labels[i].parentElement;
+        /* Try native select first */
+        var sel=parent.querySelector('select');
+        if(sel){
+          for(var j=0;j<sel.options.length;j++){
+            if(sel.options[j].text.indexOf(optionText)>=0){
+              sel.value=sel.options[j].value;
+              sel.dispatchEvent(new Event('change',{bubbles:true}));
+              console.log(labelText+' set to '+optionText+' (select)');
+              return true;
+            }
+          }
+        }
+        /* Try button/combobox dropdown */
+        var btn=parent.querySelector('button,[role="combobox"],[role="listbox"]');
+        if(btn){btn.click();
+          setTimeout(function(){
+            var opts=document.querySelectorAll('[role="option"],li[class*="option"],ul li button');
+            for(var k=0;k<opts.length;k++){
+              if(opts[k].textContent.trim().indexOf(optionText)>=0){
+                opts[k].click();
+                console.log(labelText+' set to '+optionText+' (dropdown)');
+                return;
+              }
+            }
+            console.warn(labelText+': option "'+optionText+'" not found in dropdown');
+          },500);
+          return true;
+        }
+      }
+    }
+    console.warn(labelText+' field not found');
+    return false;
+  }
+  findAndClickDropdown('Art','Reifen & Felgen');
+  setTimeout(function(){findAndClickDropdown('Versand','Versand möglich');},1000);
   console.log('Text fields filled!');
 
   /* === Upload images (one at a time for Plupload) === */
