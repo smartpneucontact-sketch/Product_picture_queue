@@ -686,6 +686,35 @@
                 document.body.removeChild(ta);
                 showToast('Script copie!', 'success');
             });
+
+            // Track listing in publisher
+            trackListing('leboncoin');
+        }
+
+        function trackListing(platform) {
+            const publisherUrl = '{{ publisher_url }}'.replace(/\/$/, '');
+            if (!publisherUrl) { console.warn('PUBLISHER_URL not configured — listing not tracked'); return; }
+
+            const f = getFields();
+            const title = document.getElementById('previewTitle')?.value || buildTitle(f);
+            const price = parseFloat(document.getElementById('previewPrice')?.value || f.price) || 0;
+
+            fetch(publisherUrl + '/api/listings/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sku: f.sku,
+                    platform: platform,
+                    title: title,
+                    price: price,
+                    currency: 'EUR',
+                    listed_at: new Date().toISOString(),
+                    status: 'active',
+                }),
+            }).then(r => {
+                if (r.ok) console.log('Listing tracked in publisher');
+                else console.warn('Failed to track listing:', r.status);
+            }).catch(e => console.warn('Could not reach publisher:', e));
         }
 
         function openLeboncoin() {

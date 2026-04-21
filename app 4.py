@@ -1,12 +1,11 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, Response
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from datetime import datetime
 from config import Config
 from models import db, Image
 from storage import R2Storage
-from processing_v3 import ImageProcessor
+from processing_v2 import ImageProcessor
 from shopify_client import ShopifyClient
 import threading
-import requests
 import numpy as np
 import logging
 
@@ -199,77 +198,69 @@ def manual_upload():
 @app.route('/api/assign', methods=['POST'])
 def assign_sku():
     """
-    Assign SKU(s) to selected images and start processing.
-    Supports multiple comma-separated SKUs stored on the same image.
-    Expects: {'image_ids': [1, 2, 3], 'sku': 'ABC123' or 'ABC123, DEF456'}
+    Assign a SKU to selected images and start processing.
+    Expects: {'image_ids': [1, 2, 3], 'sku': 'ABC123'}
     """
     data = request.get_json()
     image_ids = data.get('image_ids', [])
-    sku_raw = data.get('sku', '').strip()
-
+    sku = data.get('sku', '').strip()
+    
     if not image_ids:
         return jsonify({'error': 'No images selected'}), 400
-
-    if not sku_raw:
+    
+    if not sku:
         return jsonify({'error': 'SKU is required'}), 400
-
-    skus = [s.strip() for s in sku_raw.split(',') if s.strip()]
-    if not skus:
-        return jsonify({'error': 'SKU is required'}), 400
-
-    sku_str = ', '.join(skus)
+    
+    # Update images with SKU
     images = Image.query.filter(Image.id.in_(image_ids)).all()
-
+    
     for image in images:
-        image.sku = sku_str
+        image.sku = sku
         image.status = 'assigned'
         image.assigned_at = datetime.utcnow()
-
+    
     db.session.commit()
-
+    
+    # Start processing in background thread
     thread = threading.Thread(target=process_images, args=(image_ids, app, True))
     thread.start()
-
+    
     return jsonify({
         'success': True,
-        'message': f'Processing {len(images)} images for SKU(s): {sku_str}'
+        'message': f'Processing {len(images)} images for SKU {sku}'
     })
 
 
 @app.route('/api/draft', methods=['POST'])
 def draft_sku():
     """
-    Assign SKU(s) to selected images WITHOUT processing or uploading.
-    Supports multiple comma-separated SKUs stored on the same image.
-    Expects: {'image_ids': [1, 2, 3], 'sku': 'ABC123' or 'ABC123, DEF456'}
+    Assign a SKU to selected images WITHOUT processing or uploading.
+    Just saves the SKU as a draft for later processing.
+    Expects: {'image_ids': [1, 2, 3], 'sku': 'ABC123'}
     """
     data = request.get_json()
     image_ids = data.get('image_ids', [])
-    sku_raw = data.get('sku', '').strip()
-
+    sku = data.get('sku', '').strip()
+    
     if not image_ids:
         return jsonify({'error': 'No images selected'}), 400
-
-    if not sku_raw:
+    
+    if not sku:
         return jsonify({'error': 'SKU is required'}), 400
-
-    skus = [s.strip() for s in sku_raw.split(',') if s.strip()]
-    if not skus:
-        return jsonify({'error': 'SKU is required'}), 400
-
-    sku_str = ', '.join(skus)
+    
+    # Update images with SKU but mark as draft
     images = Image.query.filter(Image.id.in_(image_ids)).all()
-
+    
     for image in images:
-        image.sku = sku_str
+        image.sku = sku
         image.status = 'draft'
         image.assigned_at = datetime.utcnow()
-
+    
     db.session.commit()
-
+    
     return jsonify({
         'success': True,
-        'message': f'Saved {len(images)} images as draft with SKU(s): {sku_str}'
+        'message': f'Saved {len(images)} images as draft with SKU {sku}'
     })
 
 
@@ -307,24 +298,6 @@ def process_drafts():
         'success': True,
         'message': f'Processing {len(images)} draft images'
     })
-
-
-@app.route('/api/proxy-image')
-def proxy_image():
-    """Proxy an image URL to avoid CORS issues for canvas drawing and Kleinanzeigen upload."""
-    import requests as req
-    url = request.args.get('url')
-    if not url:
-        return 'Missing url', 400
-    try:
-        response = req.get(url, timeout=15)
-        resp = Response(response.content, mimetype=response.headers.get('Content-Type', 'image/jpeg'))
-        resp.headers['Access-Control-Allow-Origin'] = '*'
-        resp.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        return resp
-    except Exception as e:
-        return str(e), 500
 
 
 @app.route('/api/gauge-crop', methods=['POST'])
@@ -390,83 +363,6 @@ def gauge_crop():
         
     except Exception as e:
         logger.error(f"Gauge crop failed: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/images/<int:image_id>/gauge-region', methods=['POST'])
-def gauge_region_crop(image_id):
-    """
-    Crop a manually selected region from the original image as gauge closeup.
-    Expects: {'x': 0, 'y': 0, 'width': 50, 'height': 50} as percentages (0-100)
-    Crops that region, makes it square, resizes, enhances, and saves as processed.
-    """
-    image_record = Image.query.get_or_404(image_id)
-    data = request.get_json()
-
-    x_pct = data.get('x', 0)
-    y_pct = data.get('y', 0)
-    w_pct = data.get('width', 100)
-    h_pct = data.get('height', 100)
-
-    try:
-        import requests as req
-        from PIL import Image as PILImage, ImageEnhance
-        from io import BytesIO
-
-        response = req.get(image_record.original_url)
-        img = PILImage.open(BytesIO(response.content)).convert('RGB')
-        iw, ih = img.size
-
-        # Convert percentages to pixels
-        x1 = int(iw * x_pct / 100)
-        y1 = int(ih * y_pct / 100)
-        x2 = int(iw * (x_pct + w_pct) / 100)
-        y2 = int(ih * (y_pct + h_pct) / 100)
-
-        # Crop the selected region
-        cropped = img.crop((x1, y1, x2, y2))
-
-        # Make it square (use the larger side, center the smaller)
-        cw, ch = cropped.size
-        side = max(cw, ch)
-        square = PILImage.new('RGB', (side, side), (255, 255, 255))
-        paste_x = (side - cw) // 2
-        paste_y = (side - ch) // 2
-        square.paste(cropped, (paste_x, paste_y))
-
-        # Resize to output size
-        processor = get_processor()
-        output_size = processor.output_size
-        final = square.resize((output_size, output_size), PILImage.Resampling.LANCZOS)
-
-        # Light enhancement
-        final = ImageEnhance.Sharpness(final).enhance(1.3)
-        final = ImageEnhance.Contrast(final).enhance(1.05)
-
-        output = BytesIO()
-        final.save(output, format='JPEG', quality=98, subsampling=0)
-        output.seek(0)
-
-        # Upload
-        storage = get_storage()
-        closeup_filename = f"gauge_{image_record.original_filename}"
-        closeup_url = storage.upload_processed_image(output.getvalue(), closeup_filename)
-
-        # Update image record
-        image_record.processed_url = closeup_url
-        image_record.image_type = 'gauge'
-        image_record.status = 'processed'
-        image_record.processed_at = datetime.utcnow()
-        db.session.commit()
-
-        return jsonify({
-            'success': True,
-            'message': 'Gauge region cropped',
-            'closeup_url': closeup_url
-        })
-
-    except Exception as e:
-        logger.error(f"Gauge region crop failed: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -677,10 +573,10 @@ def process_images(image_ids, app, upload_to_shopify=True):
                     except Exception as crop_err:
                         logger.warning(f"Failed to apply crop region: {crop_err}")
                 
-                # Process image (no bg removal by default — just clean square crop)
-                # Background removal can be re-enabled per image if needed
+                # Process image (bg removal + crop)
+                # Side images skip label detection, front images find max 1 label
                 image_type = image.image_type or 'front'
-                processed_data = processor.process(original_data, image_type=image_type, remove_bg=False)
+                processed_data = processor.process(original_data, image_type=image_type)
                 
                 # Upload processed image to Cloudinary
                 processed_url = storage.upload_processed_image(processed_data, image.original_filename)
@@ -699,36 +595,24 @@ def process_images(image_ids, app, upload_to_shopify=True):
                 db.session.commit()
         
         # Upload all processed images to Shopify (only if SKU assigned and flag is True)
-        if upload_to_shopify and processed_urls:
-            # Collect all unique SKUs from all images (supports comma-separated)
-            all_skus = set()
-            for image in images:
-                if image.sku and image.status == 'processed':
-                    for s in image.sku.split(','):
-                        s = s.strip()
-                        if s:
-                            all_skus.add(s)
-
-            shopify = get_shopify()
-            upload_errors = []
-
-            for sku in all_skus:
-                try:
-                    result = shopify.add_images_to_product_by_sku(sku, processed_urls)
-                    logger.info(f"Shopify upload success for SKU {sku}: {len(processed_urls)} images")
-                except Exception as e:
-                    logger.error(f"Shopify upload failed for SKU {sku}: {e}")
-                    upload_errors.append(f"SKU {sku}: {str(e)}")
-
-            # Mark images as completed or failed
-            for image in images:
-                if image.status == 'processed':
-                    if upload_errors:
-                        image.status = 'failed'
-                        image.error_message = f"Shopify upload failed: {'; '.join(upload_errors)}"
-                    else:
+        if upload_to_shopify and sku and processed_urls:
+            try:
+                shopify = get_shopify()
+                result = shopify.add_images_to_product_by_sku(sku, processed_urls)
+                
+                # Mark all as completed
+                for image in images:
+                    if image.status == 'processed':
                         image.status = 'completed'
-            db.session.commit()
+                db.session.commit()
+                
+            except Exception as e:
+                logger.error(f"Shopify upload failed for SKU {sku}: {e}")
+                for image in images:
+                    if image.status == 'processed':
+                        image.status = 'failed'
+                        image.error_message = f"Shopify upload failed: {str(e)}"
+                db.session.commit()
         # If not uploading to Shopify, leave status as 'processed' (not 'completed')
 
 
@@ -754,23 +638,26 @@ def retry_image(image_id):
 
 @app.route('/api/images/<int:image_id>/reprocess', methods=['POST'])
 def reprocess_queue_image(image_id):
-    """Clear processed version so user can choose how to reprocess (front/gauge)."""
+    """Clear processed version and reprocess from original."""
     image = Image.query.get_or_404(image_id)
-
-    # Clear processed version — don't auto-process, let user choose
+    
+    # Clear processed version
     image.processed_url = None
-    image.status = 'pending'
+    image.status = 'assigned'
     image.error_message = None
-    image.image_type = 'front'  # Reset to default
     db.session.commit()
-
+    
+    # Start processing
+    thread = threading.Thread(target=process_images, args=([image_id], app, False))
+    thread.start()
+    
     return jsonify({'success': True})
 
 
-@app.route('/api/reset-stuck', methods=['GET', 'POST'])
+@app.route('/api/reset-stuck', methods=['POST'])
 def reset_stuck():
-    """Reset stuck processing/assigned images to failed status."""
-    stuck = Image.query.filter(Image.status.in_(['processing', 'assigned'])).all()
+    """Reset stuck processing images to failed status."""
+    stuck = Image.query.filter_by(status='processing').all()
     count = 0
     for img in stuck:
         img.status = 'failed'
@@ -779,109 +666,6 @@ def reset_stuck():
     db.session.commit()
     logger.info(f"Reset {count} stuck images")
     return jsonify({'reset': count})
-
-
-@app.route('/api/migrate-cloudinary-to-r2', methods=['GET'])
-def migrate_cloudinary_status():
-    """Check how many Cloudinary URLs need migration."""
-    images = Image.query.all()
-    
-    def is_cloudinary(url):
-        return url and 'cloudinary.com' in url
-    
-    cloudinary_original = sum(1 for img in images if is_cloudinary(img.original_url))
-    cloudinary_processed = sum(1 for img in images if is_cloudinary(img.processed_url))
-    
-    return jsonify({
-        'total_images': len(images),
-        'cloudinary_original': cloudinary_original,
-        'cloudinary_processed': cloudinary_processed,
-        'total_to_migrate': cloudinary_original + cloudinary_processed,
-        'message': 'POST to this endpoint to migrate a batch (10 images at a time)'
-    })
-
-
-@app.route('/api/migrate-cloudinary-to-r2', methods=['POST'])
-def migrate_cloudinary_to_r2():
-    """Migrate a BATCH of Cloudinary images to R2 (10 at a time)."""
-    from urllib.parse import urlparse
-    
-    storage = get_storage()
-    BATCH_SIZE = 10
-    
-    def is_cloudinary(url):
-        return url and 'cloudinary.com' in url
-    
-    def download_image(url):
-        try:
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            return response.content
-        except Exception as e:
-            logger.error(f"Failed to download {url}: {e}")
-            return None
-    
-    def get_ext(url):
-        path = urlparse(url).path
-        if '.' in path:
-            return path.rsplit('.', 1)[-1].lower()
-        return 'jpg'
-    
-    # Find images with Cloudinary URLs (limit to batch size)
-    images = Image.query.all()
-    to_migrate = [img for img in images if is_cloudinary(img.original_url) or is_cloudinary(img.processed_url)]
-    batch = to_migrate[:BATCH_SIZE]
-    
-    if not batch:
-        return jsonify({
-            'success': True,
-            'message': 'All done! No more Cloudinary images to migrate.',
-            'remaining': 0
-        })
-    
-    migrated = {'original': 0, 'processed': 0, 'failed': 0}
-    
-    for img in batch:
-        # Migrate original_url
-        if is_cloudinary(img.original_url):
-            data = download_image(img.original_url)
-            if data:
-                try:
-                    new_url = storage.upload_image(data, f"migrated.{get_ext(img.original_url)}", 'originals')
-                    img.original_url = new_url
-                    migrated['original'] += 1
-                except Exception as e:
-                    logger.error(f"R2 upload failed: {e}")
-                    migrated['failed'] += 1
-            else:
-                migrated['failed'] += 1
-        
-        # Migrate processed_url
-        if is_cloudinary(img.processed_url):
-            data = download_image(img.processed_url)
-            if data:
-                try:
-                    new_url = storage.upload_image(data, f"migrated.{get_ext(img.processed_url)}", 'processed')
-                    img.processed_url = new_url
-                    migrated['processed'] += 1
-                except Exception as e:
-                    logger.error(f"R2 upload failed: {e}")
-                    migrated['failed'] += 1
-            else:
-                migrated['failed'] += 1
-        
-        db.session.commit()
-    
-    remaining = len(to_migrate) - len(batch)
-    
-    return jsonify({
-        'success': True,
-        'batch_migrated_original': migrated['original'],
-        'batch_migrated_processed': migrated['processed'],
-        'batch_failed': migrated['failed'],
-        'remaining': remaining,
-        'message': f'{remaining} images still need migration. Run again!' if remaining > 0 else 'All done!'
-    })
 
 
 @app.route('/api/images/<int:image_id>/mark-side', methods=['POST'])
@@ -899,83 +683,6 @@ def mark_side(image_id):
     return jsonify({'success': True, 'image_type': image.image_type})
 
 
-@app.route('/api/images/<int:image_id>/process-front', methods=['POST'])
-def process_front(image_id):
-    """Process image as front tire (with label detection)."""
-    image = Image.query.get_or_404(image_id)
-    image.image_type = 'front'
-    image.status = 'assigned'
-    image.processed_url = None
-    image.error_message = None
-    db.session.commit()
-    
-    # Start processing
-    thread = threading.Thread(target=process_images, args=([image_id], app, False))
-    thread.start()
-    
-    return jsonify({'success': True, 'message': 'Processing as front tire'})
-
-
-@app.route('/api/images/<int:image_id>/process-side', methods=['POST'])
-def process_side(image_id):
-    """Process image as side tire (no label detection) - processes immediately."""
-    image = Image.query.get_or_404(image_id)
-    image.image_type = 'side'
-    image.status = 'assigned'
-    image.processed_url = None
-    image.error_message = None
-    db.session.commit()
-    
-    # Start processing
-    thread = threading.Thread(target=process_images, args=([image_id], app, False))
-    thread.start()
-    
-    return jsonify({'success': True, 'message': 'Processing as side tire'})
-
-
-@app.route('/api/images/<int:image_id>/process-gauge', methods=['POST'])
-def process_gauge_auto(image_id):
-    """Auto-detect orange gauge case and crop to consistent size."""
-    image = Image.query.get_or_404(image_id)
-    
-    try:
-        # Download original image
-        response = requests.get(image.original_url, timeout=30)
-        response.raise_for_status()
-        image_data = response.content
-        
-        # Process with auto gauge detection
-        processor = get_processor()
-        result, message = processor.crop_gauge_auto(image_data)
-        
-        if result is None:
-            return jsonify({'success': False, 'error': message}), 400
-        
-        # Upload processed image
-        storage = get_storage()
-        processed_url = storage.upload_processed_image(result, f"gauge_{image.original_filename}")
-        
-        # Update database
-        image.processed_url = processed_url
-        image.status = 'completed'
-        image.image_type = 'gauge'
-        image.error_message = None
-        db.session.commit()
-        
-        return jsonify({
-            'success': True, 
-            'message': message,
-            'processed_url': processed_url
-        })
-        
-    except Exception as e:
-        logger.error(f"Gauge processing failed for image {image_id}: {e}")
-        image.status = 'failed'
-        image.error_message = str(e)
-        db.session.commit()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
 # =============================================================================
 # Web UI
 # =============================================================================
@@ -990,141 +697,6 @@ def index():
 def lab():
     """Processing Lab UI - reprocess images with different settings."""
     return render_template('lab.html')
-
-
-@app.route('/kleinanzeigen')
-def kleinanzeigen():
-    """Kleinanzeigen auto-fill tool."""
-    return render_template('kleinanzeigen.html', publisher_url=app.config.get('PUBLISHER_URL', ''))
-
-
-@app.route('/leboncoin')
-def leboncoin():
-    """Leboncoin auto-fill tool."""
-    return render_template('leboncoin.html', publisher_url=app.config.get('PUBLISHER_URL', ''))
-
-
-@app.route('/facture')
-def facture():
-    """Invoice generator tool."""
-    return render_template('facture.html')
-
-
-@app.route('/api/product-lookup', methods=['POST'])
-def product_lookup():
-    """Look up full product data from Shopify by SKU for Kleinanzeigen listing."""
-    data = request.get_json()
-    sku = data.get('sku', '').strip()
-    if not sku:
-        return jsonify({'error': 'SKU required'}), 400
-
-    try:
-        shopify = get_shopify()
-
-        # Extended GraphQL query with metafields for tire data
-        query = """
-        query findProduct($query: String!) {
-            productVariants(first: 1, query: $query) {
-                edges {
-                    node {
-                        id
-                        sku
-                        price
-                        title
-                        product {
-                            id
-                            title
-                            description
-                            productType
-                            vendor
-                            tags
-                            images(first: 10) {
-                                edges {
-                                    node {
-                                        url
-                                    }
-                                }
-                            }
-                            tread_depth: metafield(namespace: "custom", key: "tread_depth") { value }
-                            rayon: metafield(namespace: "custom", key: "rayon") { value }
-                            hauteur: metafield(namespace: "custom", key: "hauteur") { value }
-                            largeur: metafield(namespace: "custom", key: "largeur") { value }
-                            dot: metafield(namespace: "custom", key: "dot") { value }
-                            speed_index: metafield(namespace: "custom", key: "speed_index") { value }
-                            load_index: metafield(namespace: "custom", key: "load_index") { value }
-                            model: metafield(namespace: "custom", key: "model") { value }
-                        }
-                    }
-                }
-            }
-        }
-        """
-        result = shopify._graphql(query, {'query': f'sku:{sku}'})
-        edges = result.get('productVariants', {}).get('edges', [])
-
-        if not edges:
-            return jsonify({'error': f'No product found for SKU: {sku}'}), 404
-
-        node = edges[0]['node']
-        product = node['product']
-        images = [e['node']['url'] for e in product.get('images', {}).get('edges', [])]
-
-        # Extract metafield values
-        def mf(key):
-            val = product.get(key)
-            return val.get('value', '') if val else ''
-
-        # Build size from largeur/hauteur/rayon (e.g. 245/40 R19)
-        largeur = mf('largeur')
-        hauteur = mf('hauteur')
-        rayon = mf('rayon')
-        size = f"{largeur}/{hauteur} R{rayon}" if largeur and hauteur and rayon else ''
-
-        resp_data = {
-            'success': True,
-            'sku': node['sku'],
-            'price': node['price'],
-            'variant_title': node['title'],
-            'title': product['title'],
-            'description': product.get('description', ''),
-            'product_type': product.get('productType', ''),
-            'vendor': product.get('vendor', ''),
-            'tags': product.get('tags', []),
-            'images': images,
-            'tire_data': {
-                'brand': product.get('vendor', ''),
-                'model': mf('model'),
-                'size': size,
-                'largeur': largeur,
-                'hauteur': hauteur,
-                'rayon': rayon,
-                'tread_depth': mf('tread_depth'),
-                'dot': mf('dot'),
-                'speed_index': mf('speed_index'),
-                'load_index': mf('load_index'),
-            },
-        }
-
-        # Also get processed images from SmartPneu database for this SKU
-        local_images = Image.query.filter(
-            Image.sku.contains(sku),
-            Image.processed_url.isnot(None)
-        ).order_by(Image.created_at.desc()).limit(10).all()
-
-        if local_images:
-            resp_data['processed_images'] = [
-                {'url': img.processed_url, 'type': img.image_type, 'filename': img.original_filename}
-                for img in local_images
-            ]
-            resp_data['original_images'] = [
-                {'url': img.original_url, 'type': img.image_type, 'filename': img.original_filename}
-                for img in local_images if img.original_url
-            ]
-
-        return jsonify(resp_data)
-    except Exception as e:
-        logger.error(f"Product lookup failed: {e}")
-        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/health')
