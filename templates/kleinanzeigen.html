@@ -380,16 +380,13 @@
         }
 
         function buildTitle(f) {
-            // Format: 2x Kumho Ecowing ES31 Sommerreifen – 165/60 R14 75H – Profiltiefe 8,01 mm
+            // Format: 4x Sommerreifen 235/55 R18 100V Michelin inkl. Montage
             let parts = [f.quantity + 'x'];
-            if (f.brand) parts.push(f.brand);
-            if (f.model) parts.push(f.model);
             if (f.season) parts.push(f.season);
-            parts.push('–');
             if (f.size) parts.push(f.size);
             if (f.loadSpeed) parts.push(f.loadSpeed);
-            parts.push('–');
-            if (f.treadDepth) parts.push('Profiltiefe ' + f.treadDepth.replace('.', ',') + ' mm');
+            if (f.brand) parts.push(f.brand);
+            parts.push('inkl. Montage');
             return parts.join(' ');
         }
 
@@ -542,7 +539,7 @@
             const imageUrlsJson = JSON.stringify(proxiedUrls);
 
             const script = `(async function(){
-  /* === Fill text fields === */
+  function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
   function setVal(el,val){
     if(!el)return;
     var nativeSetter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
@@ -553,6 +550,50 @@
     el.dispatchEvent(new Event('change',{bubbles:true}));
     el.dispatchEvent(new Event('blur',{bubbles:true}));
   }
+  function clickDropdown(btnId, optionText){
+    return new Promise(function(resolve){
+      var btn=document.getElementById(btnId);
+      if(!btn){console.warn(btnId+' not found');resolve();return;}
+      btn.click();
+      setTimeout(function(){
+        var opts=document.querySelectorAll('[role="option"],li button,ul li');
+        for(var k=0;k<opts.length;k++){
+          if(opts[k].textContent.trim().indexOf(optionText)>=0){
+            opts[k].click();
+            console.log(btnId+' -> '+optionText);
+            resolve();return;
+          }
+        }
+        console.warn(btnId+': "'+optionText+'" not found');
+        resolve();
+      },500);
+    });
+  }
+
+  /* === Step 1: Select category === */
+  var catRadio=document.querySelector('input[value="Auto, Rad & Boot"]')||
+    document.querySelector('label[for*="autoteile"]')||null;
+  /* Try clicking the category text */
+  var allLabels=document.querySelectorAll('label,span,div');
+  for(var i=0;i<allLabels.length;i++){
+    var txt=allLabels[i].textContent.trim();
+    if(txt==='Auto, Rad & Boot \\u2192 Autoteile & Reifen \\u2192 Reifen & Felgen'||
+       txt.indexOf('Reifen & Felgen')>=0&&txt.indexOf('Autoteile')>=0){
+      var radio=allLabels[i].closest('label')||allLabels[i];
+      var inp=radio.querySelector('input[type="radio"]');
+      if(inp){inp.checked=true;inp.click();inp.dispatchEvent(new Event('change',{bubbles:true}));console.log('Category selected');break;}
+      radio.click();console.log('Category clicked');break;
+    }
+  }
+  await wait(1500);
+
+  /* === Step 2: Select Art & Versand dropdowns === */
+  await clickDropdown('autoteile_reifen.art','Reifen & Felgen');
+  await wait(800);
+  await clickDropdown('autoteile_reifen.versand','Versand möglich');
+  await wait(500);
+
+  /* === Step 3: Fill text fields === */
   setVal(document.getElementById('ad-title'),'${title}');
   setVal(document.getElementById('ad-price-amount'),'${price}');
   setVal(document.getElementById('ad-name'),'smartpneu.com');
@@ -564,29 +605,9 @@
     d.dispatchEvent(new Event('input',{bubbles:true}));
     d.dispatchEvent(new Event('change',{bubbles:true}));
   }
-
-  /* === Select dropdowns: Art & Versand === */
-  function clickDropdown(btnId, optionText){
-    var btn=document.getElementById(btnId);
-    if(!btn){console.warn(btnId+' not found');return;}
-    btn.click();
-    setTimeout(function(){
-      var opts=document.querySelectorAll('[role="option"],li button,ul li');
-      for(var k=0;k<opts.length;k++){
-        if(opts[k].textContent.trim().indexOf(optionText)>=0){
-          opts[k].click();
-          console.log(btnId+' -> '+optionText);
-          return;
-        }
-      }
-      console.warn(btnId+': "'+optionText+'" not found');
-    },500);
-  }
-  clickDropdown('autoteile_reifen.art','Reifen & Felgen');
-  setTimeout(function(){clickDropdown('autoteile_reifen.versand','Versand möglich');},1200);
   console.log('Text fields filled!');
 
-  /* === Upload images (one at a time for Plupload) === */
+  /* === Step 4: Upload images (one at a time for Plupload) === */
   var imageUrls=${imageUrlsJson};
   var uploaded=0;
   if(imageUrls.length>0){
@@ -602,14 +623,13 @@
         var file=new File([blob],'tire_'+(i+1)+ext,{type:blob.type});
         var dt=new DataTransfer();
         dt.items.add(file);
-        /* Re-query file input each time - Plupload may recreate it after each upload */
         var fileInput=document.querySelector('input[type="file"][accept*="image"]');
         if(!fileInput){console.error('File input not found for image '+(i+1));continue;}
         fileInput.files=dt.files;
         fileInput.dispatchEvent(new Event('change',{bubbles:true}));
         uploaded++;
         console.log('Image '+(i+1)+' uploaded, waiting for Plupload...');
-        await new Promise(function(r){setTimeout(r,1500);});
+        await wait(1500);
       }catch(e){console.error('Failed image '+(i+1)+':',e);}
     }
   }
@@ -639,7 +659,7 @@
             const publisherUrl = '{{ publisher_url }}'.replace(/\/$/, '');
             if (!publisherUrl) { console.warn('PUBLISHER_URL not configured — listing not tracked'); return; }
 
-            const f = collectFields();
+            const f = getFields();
             const title = document.getElementById('previewTitle')?.value || buildTitle(f);
             const price = parseFloat(document.getElementById('previewPrice')?.value || f.price) || 0;
 
