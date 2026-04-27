@@ -415,7 +415,6 @@
             lines.push('Details:');
             lines.push(`-Marke: ${f.brand} ${f.model} `);
             lines.push(`-Größe: ${f.size} ${f.loadSpeed} `);
-            lines.push(`-Anzahl: ${qty} Reifen `);
             lines.push(`-Profiltiefe: ${treadComma} mm `);
             lines.push(`-DOT: ${f.dot} `);
             lines.push('');
@@ -552,11 +551,15 @@
   }
   function clickDropdown(btnId, optionText){
     return new Promise(function(resolve){
-      var btn=document.getElementById(btnId);
+      /* Try the ID directly, or the wrapper/button around it */
+      var btn=document.getElementById(btnId)||document.getElementById(btnId+'-selected-option');
       if(!btn){console.warn(btnId+' not found');resolve();return;}
-      btn.click();
+      /* Click the closest clickable wrapper */
+      var wrapper=btn.closest('button')||btn.closest('[role="combobox"]')||btn.closest('[data-testid="input-label-wrapper"]')||btn;
+      wrapper.click();
+      console.log('Clicked dropdown: '+btnId);
       setTimeout(function(){
-        var opts=document.querySelectorAll('[role="option"],li button,ul li');
+        var opts=document.querySelectorAll('[role="option"],li button,ul li,[role="listbox"] div');
         for(var k=0;k<opts.length;k++){
           if(opts[k].textContent.trim().indexOf(optionText)>=0){
             opts[k].click();
@@ -564,32 +567,34 @@
             resolve();return;
           }
         }
-        console.warn(btnId+': "'+optionText+'" not found');
+        console.warn(btnId+': "'+optionText+'" not found in '+opts.length+' options');
         resolve();
-      },500);
+      },800);
     });
   }
 
-  /* === Step 1: Select category === */
-  var catRadio=document.querySelector('input[value="Auto, Rad & Boot"]')||
-    document.querySelector('label[for*="autoteile"]')||null;
-  /* Try clicking the category text */
-  var allLabels=document.querySelectorAll('label,span,div');
-  for(var i=0;i<allLabels.length;i++){
-    var txt=allLabels[i].textContent.trim();
-    if(txt==='Auto, Rad & Boot \\u2192 Autoteile & Reifen \\u2192 Reifen & Felgen'||
-       txt.indexOf('Reifen & Felgen')>=0&&txt.indexOf('Autoteile')>=0){
-      var radio=allLabels[i].closest('label')||allLabels[i];
-      var inp=radio.querySelector('input[type="radio"]');
-      if(inp){inp.checked=true;inp.click();inp.dispatchEvent(new Event('change',{bubbles:true}));console.log('Category selected');break;}
-      radio.click();console.log('Category clicked');break;
+  /* === Step 1: Select category (radio value=223) === */
+  var catInput=document.getElementById('223')||document.querySelector('input[value="223"]');
+  if(catInput){
+    catInput.click();
+    catInput.dispatchEvent(new Event('change',{bubbles:true}));
+    console.log('Category radio 223 selected');
+  } else {
+    /* Fallback: find by text */
+    var labels=document.querySelectorAll('label,div[data-testid="position-container"]');
+    for(var i=0;i<labels.length;i++){
+      if(labels[i].textContent.indexOf('Reifen & Felgen')>=0&&labels[i].textContent.indexOf('Autoteile')>=0){
+        var inp=labels[i].querySelector('input[type="radio"]');
+        if(inp){inp.click();inp.dispatchEvent(new Event('change',{bubbles:true}));console.log('Category selected by text');}
+        break;
+      }
     }
   }
-  await wait(1500);
+  await wait(2000);
 
   /* === Step 2: Select Art & Versand dropdowns === */
   await clickDropdown('autoteile_reifen.art','Reifen & Felgen');
-  await wait(800);
+  await wait(1000);
   await clickDropdown('autoteile_reifen.versand','Versand möglich');
   await wait(500);
 
