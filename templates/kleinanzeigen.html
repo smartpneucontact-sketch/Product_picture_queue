@@ -315,7 +315,7 @@
                     <strong>4.</strong> Drücke <kbd>F12</kbd> → Console Tab<br>
                     <strong>5.</strong> <kbd>Ctrl+V</kbd> einfügen → <kbd>Enter</kbd><br>
                     <strong>6.</strong> Titel, Preis & Beschreibung werden ausgefüllt!<br>
-                    <span style="color:#888;font-size:12px;">Kategorie und Bilder bitte manuell setzen.</span>
+                    <span style="color:#888;font-size:12px;">Bilder werden automatisch hochgeladen.</span>
                 </p>
             </div>
         </div>
@@ -573,23 +573,47 @@
     });
   }
 
-  /* === Step 1: Select category (radio value=223) === */
-  var catInput=document.getElementById('223')||document.querySelector('input[value="223"]');
-  if(catInput){
-    catInput.click();
-    catInput.dispatchEvent(new Event('change',{bubbles:true}));
-    console.log('Category radio 223 selected');
-  } else {
-    /* Fallback: find by text */
-    var labels=document.querySelectorAll('label,div[data-testid="position-container"]');
-    for(var i=0;i<labels.length;i++){
-      if(labels[i].textContent.indexOf('Reifen & Felgen')>=0&&labels[i].textContent.indexOf('Autoteile')>=0){
-        var inp=labels[i].querySelector('input[type="radio"]');
-        if(inp){inp.click();inp.dispatchEvent(new Event('change',{bubbles:true}));console.log('Category selected by text');}
+  /* === Step 1: Select category "Reifen & Felgen" === */
+  var catSelected=false;
+  function simClick(el){
+    el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));
+    el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true}));
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+  }
+  /* Strategy A: find the radio for "Reifen & Felgen" and click its label */
+  var radios=document.querySelectorAll('input[name="category-suggestions"]');
+  for(var i=0;i<radios.length;i++){
+    var lbl=document.querySelector('label[for="'+radios[i].id+'"]');
+    var wrapper=radios[i].closest('[data-testid="position-container"]')||radios[i].closest('label')||radios[i].parentElement;
+    var textEl=lbl||wrapper;
+    if(textEl&&textEl.textContent.indexOf('Reifen & Felgen')>=0){
+      /* Click the label first (React listens on labels) */
+      if(lbl){simClick(lbl);console.log('Clicked label for='+radios[i].id);}
+      /* Also click the wrapper div */
+      if(wrapper&&wrapper!==lbl){simClick(wrapper);console.log('Clicked wrapper');}
+      /* Force-check the radio */
+      radios[i].checked=true;
+      radios[i].dispatchEvent(new Event('change',{bubbles:true}));
+      radios[i].dispatchEvent(new Event('input',{bubbles:true}));
+      simClick(radios[i]);
+      console.log('Radio '+radios[i].id+' force-checked');
+      catSelected=true;
+      break;
+    }
+  }
+  /* Strategy B: fallback — click position-container with matching text */
+  if(!catSelected){
+    var containers=document.querySelectorAll('[data-testid="position-container"]');
+    for(var i=0;i<containers.length;i++){
+      if(containers[i].textContent.indexOf('Reifen & Felgen')>=0){
+        simClick(containers[i]);
+        console.log('Fallback: position-container clicked');
+        catSelected=true;
         break;
       }
     }
   }
+  if(!catSelected) console.warn('Category not found!');
   await wait(2000);
 
   /* === Step 2: Select Art & Versand dropdowns === */
